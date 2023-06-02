@@ -165,7 +165,7 @@ class LADMM(torch.nn.Module):
 
 
     def forward(self, b, target):
-        x =  torch.randn_like(target)
+        x =  torch.ones_like(target)
 
         eta_l1 = torch.zeros_like(x)
         eta_tv = torch.zeros_like(x)
