@@ -1,12 +1,15 @@
 python main_spectral.py \
--b 32 \
--j 16 \
--lr 1e-3 \
+-b 8 \
+-j 4 \
+-lr 1e-2 \
 --steps 50 \
---epochs 80 \
+--epochs 60 \
+--mode l1_tv \
 --model_file save_model/spectral_fc_01.pth \
 --sp_file data/SpectralResponse_9.npy \
+--data_path data/SpectralResponse_9_1024 \
+--layer_num 30 \
 --gpu 0 \
 --log_file "save_model/spectral_fc_01.log" \
---sig_min 20 \
---sig_max 30
+--sig_min 200 \
+--sig_max 201

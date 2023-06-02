@@ -6,14 +6,15 @@ import matplotlib.pyplot as plt
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from dataset.SpectralDataset import SpectralDataset , MultiSpectralDataset
+from dataset.SpectralDataset import SpectralFileDataset , MultiSpectralDataset
 import argparse
 import logging
 from torch.optim.lr_scheduler import StepLR, MultiStepLR
 import datetime
 from meter import AverageMeter, Summary, ProgressMeter
+import random
+import numpy as np
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
  
 def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
 
@@ -29,7 +30,7 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
         X, y = X.to(device), y.to(device)
 
         # Compute prediction error
-        pred, sysloss = model(X)
+        pred = model(X,y)
 
         # logging.debug("pred per batch:{}\n".format(pred)) 
         # gamma = torch.Tensor([0.1]).to(device)
@@ -40,10 +41,10 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
         # for model_fc
         pred_roll = torch.roll(pred, 1 , 1)
         loss_tv = loss_fn(pred, pred_roll)
-        gamma = torch.Tensor([1]).to(device) 
-        loss = loss_fn(pred, y)+ torch.mul(gamma, loss_tv)
+        gamma = torch.Tensor([0.1]).to(device) 
+        loss = loss_fn(pred, y) #+ torch.mul(gamma, loss_tv)
 
-        logging.debug("loss per batch:{}, sysloss:{}, loss_tv:{}\n".format(loss.item(), sysloss, loss_tv)) 
+        logging.debug("loss per batch:{},  loss_tv:{}\n".format(loss.item(), loss_tv)) 
         losses.update(loss.item(), X.size(0))
 
         
@@ -71,7 +72,7 @@ def val(dataloader, model, loss_fn, epoch, device):
     with torch.no_grad():
         for X, y in dataloader:
             X, y = X.to(device), y.to(device)
-            pred,sysloss = model(X)
+            pred = model(X,y)
             # pred_max, pred_max_ind = torch.max(pred,dim=1)
             # y_max, y_max_ind = torch.max(pred, dim=1)
             # print(pred_max_ind, y_max_ind)
@@ -97,7 +98,7 @@ def test(dataloader, model, device, epoch, args):
         for X, y in dataloader:
             num = num + 1
             X, y = X.to(device), y.to(device)
-            pred, sys_loss = model(X)
+            pred = model(X,y)
             if num > 1:
                 break           
             cs = pred.detach().squeeze(0).cpu() 
@@ -123,11 +124,11 @@ def main(args):
     logging.info("Batch_Size: {}".format(Batch_Size))
     
     sig = [args.sig_min, args.sig_max]
-    training_data = SpectralDataset(args.sp_file, train=True, have_noise=args.have_noise, sig=sig)
-    val_data = SpectralDataset(args.sp_file, train=False,  have_noise=args.have_noise, sig=sig)
+    training_data = SpectralFileDataset(args.sp_file, train=True, data_path=args.data_path)
+    val_data = SpectralFileDataset(args.sp_file, train=False,  data_path=args.data_path)
 
 
-    train_dataloader = DataLoader(training_data, batch_size=Batch_Size, shuffle=True, persistent_workers = True, prefetch_factor = 4, 
+    train_dataloader = DataLoader(training_data, batch_size=Batch_Size, shuffle=False, persistent_workers = True, prefetch_factor = 4, 
                                   drop_last=True,num_workers=workers, pin_memory=True)
     val_dataloader = DataLoader(val_data, batch_size=4, shuffle=False,
                                 drop_last=False,num_workers=workers, pin_memory=True)
@@ -136,7 +137,7 @@ def main(args):
  
     # 3.模型加载, 并对模型进行微调
     size = training_data.get_size()
-    net = LADMM(mode="only_tv",sp_file=args.sp_file)
+    net = LADMM(mode=args.mode,sp_file=args.sp_file, iter= args.layer_num)
     logging.info(net)
 
     if pretrained is not None:
@@ -165,8 +166,9 @@ def main(args):
     best_acc = torch.inf
     logging.info("Epoches:  {}".format(Epoches))
     scheduler = MultiStepLR(optimizer, milestones=args.steps, gamma=args.gamma)
-    
+    torch.autograd.set_detect_anomaly(True)
     for epoch in range(Epoches):
+        # setup_seed(20)
         logging.info("learning ratio: {}".format(scheduler.get_last_lr()))
         # print(optimizer.param_groups)
         train(train_dataloader, net, criterion, optimizer, epoch, device, args)
@@ -198,7 +200,11 @@ if __name__ == '__main__':
     parser.add_argument('--sp_file', default="data/SpectralResponse_9.npy", type=str, 
                         help='otf file path')
     parser.add_argument('--qinit_file', default="data/qinit.npy", type=str, 
-                        help='qinit file path, size: 3380*9')    
+                        help='qinit file path, size: 3380*9')   
+    parser.add_argument('--data_path', default="data/SpectralResponse_9_1024", type=str, 
+                        help='data_path, size: 3380*9')   
+    parser.add_argument('--mode', default="l1+tv", type=str, 
+                        help='mode only_l1, only_tv, l1_tv, l1_cnn')   
     parser.add_argument('--multiple', default=2, type=int, 
                         help='multiple of chan')
     parser.add_argument('--layer_num', default=9, type=int, 

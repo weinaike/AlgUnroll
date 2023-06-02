@@ -6,11 +6,12 @@ from model_block import SoftThresh
 class ADMM(torch.nn.Module):
     def __init__(self, mode = "only_tv"):
         # 步长
-        self.alpha = 5                  # w 
-        self.beta =  5                  # g(z)
+
         self.gamma_l1 = 10              # u_l1
         self.gamma_tv = 10              # u_tv
         self.gamma_dwt = 1              # u_dwt
+        self.alpha = 5                  # w 
+        self.beta =  5                  # g(z)        
         self.s = 1.0                    # for g(z)
         ## 拉格朗日乘子
         self.lambda_l1 = 1.0e-4
@@ -166,10 +167,6 @@ class ADMM(torch.nn.Module):
             tau = self.update_tau(x, w, tau)
 
         return x
-    
-
-    
-
 
 if __name__ == '__main__':
     admm = ADMM(mode="l1+tv")
