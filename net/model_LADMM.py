@@ -96,7 +96,7 @@ class LADMM(torch.nn.Module):
                 return torch.zeros_like(x)
         elif mode == "tv":
             if self.enble_tv == 1:
-                val = torch.matmul(x, self.Delta) + eta / torch.abs(self.gamma_tv[i])
+                val = torch.matmul(x, self.DeltaT) + eta / torch.abs(self.gamma_tv[i])
                 thresh = torch.abs(self.lambda_tv[i] / self.gamma_tv[i])
                 return SoftThresh(val, thresh)
             else:
@@ -137,7 +137,7 @@ class LADMM(torch.nn.Module):
             resiual += torch.abs(self.gamma_l1[i]) * u_l1 - eta_l1
             add_item += torch.abs(self.gamma_l1[i]) * self.I
         if self.enble_tv == 1:
-            resiual += torch.matmul(torch.abs(self.gamma_tv[i]) * u_tv - eta_tv, self.DeltaT)
+            resiual += torch.matmul(torch.abs(self.gamma_tv[i]) * u_tv - eta_tv, self.Delta)
             add_item += torch.abs(self.gamma_tv[i]) * self.DeltaTDelta
         if self.enble_dwt == 1:
             resiual += torch.abs(self.gamma_dwt[i]) * u_dwt - eta_dwt
@@ -157,10 +157,10 @@ class LADMM(torch.nn.Module):
                 eta_n = eta + torch.abs(self.gamma_l1[i]) * (x - u)
         elif mode == "tv":
             if self.enble_tv == 1:
-                eta_n = eta + torch.abs(self.gamma_tv[i]) * (torch.matmul(x, self.Delta) - u)
+                eta_n = eta + torch.abs(self.gamma_tv[i]) * (torch.matmul(x, self.DeltaT) - u)
         elif mode == "dwt":
             if self.enble_dwt == 1:
-                eta_n = eta + torch.abs(self.gamma_dwt[i]) * (torch.matmul(x, self.Delta) - u) ###todo
+                eta_n = eta + torch.abs(self.gamma_dwt[i]) * (torch.matmul(x, self.DeltaT) - u) ###todo
         else:
             print("mode [{}] is not support".format(mode))
             assert(0)
