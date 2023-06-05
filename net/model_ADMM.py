@@ -60,14 +60,18 @@ class ADMM(torch.nn.Module):
             print("mode [{}] is not support ".format(mode))
             assert(0)
 
-        self.A = torch.transpose(torch.tensor(np.load("data/SpectralResponse_9.npy"), dtype=torch.float), 0, 1)
+        self.AT = torch.tensor(np.load("data/SpectralResponse_9.npy"), dtype=torch.float)
+        self.A = torch.transpose(self.AT, 0, 1)
+
         sz = self.A.size()
 
         I = torch.eye(sz[1])
         I_roll = torch.roll(I, 1, dims = 1)
         self.Delta = I_roll - I
-        self.DeltaTDelta = torch.matmul(torch.transpose(self.Delta, 0, 1), self.Delta)
+        self.DeltaT = torch.transpose(self.Delta, 0, 1)
+        self.DeltaTDelta = torch.matmul(self.DeltaT, self.Delta)
         self.ATA = torch.matmul(torch.transpose(self.A, 0, 1), self.A)
+
         self.inv_item = torch.linalg.inv(self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.beta + self.gamma_l1) * I)
 
     # mode in ["l1", "tv", "dwt"]
@@ -81,9 +85,7 @@ class ADMM(torch.nn.Module):
                 return torch.zeros_like(x)
         elif mode == "tv":
             if self.lambda_tv != 0:
-                x_roll = torch.roll(x, 1, dims = 0)
-                delta_x = x_roll - x
-                val = delta_x + eta / self.gamma_tv
+                val = torch.matmul(self.Delta, x) + eta / self.gamma_tv
                 thresh = self.lambda_tv / self.gamma_tv
                 return SoftThresh(val, thresh)
             else:
@@ -108,25 +110,34 @@ class ADMM(torch.nn.Module):
             mu_3 = self.sigma * self.s
             z = mu_2 * (x + rho) 
             for i in range(k_iter):
-                z = mu_1 * z  + mu_2 * (x + rho) # - mu_3 * RegularBlock(z)
+                z = mu_1 * z  + mu_2 * (x + rho/self.beta) # - mu_3 * RegularBlock(z)
             return z
         else:
             return torch.zeros_like(x)
 
     def update_x(self, b, u_l1, eta_l1, u_tv, eta_tv, u_dwt, eta_dwt, z, rho, w, tau):
-        resiual = torch.matmul(b, self.A) + (torch.mul(self.gamma_l1, u_l1) - eta_l1) \
-                  + (torch.mul(self.gamma_tv, u_tv) - eta_tv) + (torch.mul(self.gamma_dwt, u_dwt) - eta_dwt) \
-                  + (torch.mul(self.beta, z) - rho) + (torch.mul(self.alpha , w) - tau)
-        x =  torch.matmul(resiual, self.inv_item)
+        resiual = torch.matmul(self.AT, b) 
+        resiual += (torch.mul(self.gamma_l1, u_l1) - eta_l1) 
+
+        z_tv = (torch.mul(self.gamma_tv, u_tv) - eta_tv)
+        # z_tv_roll = torch.roll(z_tv, 1, 0)
+        # resiual += (z_tv - z_tv_roll)
+        resiual += torch.matmul(z_tv, self.DeltaT)
+        # resiual += z_tv
+
+        resiual += (torch.mul(self.gamma_dwt, u_dwt) - eta_dwt) 
+        resiual += (torch.mul(self.beta, z) - rho) 
+        resiual += (torch.mul(self.alpha , w) - tau)
+        x =  torch.matmul(self.inv_item, resiual)
         return x
         
     def update_eta(self, x, u, eta, mode = "tv"):
         if mode == "l1":
             eta += torch.mul(self.gamma_l1, (x - u))
         elif mode == "tv":
-            eta += torch.mul(self.gamma_tv , (torch.matmul(self.Delta,x) - u))
+            eta += torch.mul(self.gamma_tv , (torch.matmul(self.Delta, x) - u))
         elif mode == "dwt":
-            eta += torch.mul(self.gamma_dwt , (torch.matmul(self.Delta,x) - u)) ###todo
+            eta += torch.mul(self.gamma_dwt , (torch.matmul(self.Delta, x) - u)) ###todo
         else:
             print("mode [{}] is not support".format(mode))
             assert(0)
@@ -141,7 +152,7 @@ class ADMM(torch.nn.Module):
 
 
     def forward(self, target):
-        iter = 50
+        iter = 300
         b = torch.matmul(self.A, target)
 
         x = torch.randn_like(target)
@@ -173,7 +184,7 @@ if __name__ == '__main__':
     import random
     center = random.uniform(400,3500)
     # center = random.uniform(1000,1100)
-    sigma = random.uniform(50,100)
+    sigma = random.uniform(200,300)
     sp = np.load("data/SpectralResponse_9.npy")
     length, det_num = sp.shape
     x = np.linspace(355,3735,length)

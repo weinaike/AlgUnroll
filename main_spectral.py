@@ -46,7 +46,7 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
         # for model_fc
         pred_roll = torch.roll(pred, 1 , 1)
         loss_tv = loss_fn(pred, pred_roll)
-        gamma = torch.Tensor([0.1]).to(device) 
+        gamma = torch.Tensor([0.5]).to(device) 
         loss = loss_fn(pred, y) #+ torch.mul(gamma, loss_tv)
 
         logging.debug("loss per batch:{},  loss_tv:{}\n".format(loss.item(), loss_tv)) 

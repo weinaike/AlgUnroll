@@ -33,7 +33,8 @@ class LADMM(torch.nn.Module):
         self.I = torch.eye(sz[1])
         I_roll = torch.roll(self.I, 1, dims = 1)
         self.Delta = I_roll - self.I
-        self.DeltaTDelta = torch.matmul(torch.transpose(self.Delta, 0, 1), self.Delta)
+        self.DeltaT = torch.transpose(self.Delta, 0, 1)
+        self.DeltaTDelta = torch.matmul(self.DeltaT, self.Delta)
         self.ATA = torch.matmul(torch.transpose(self.A, 0, 1), self.A)
         
         self.enble_l1 = 1
@@ -95,9 +96,7 @@ class LADMM(torch.nn.Module):
                 return torch.zeros_like(x)
         elif mode == "tv":
             if self.enble_tv == 1:
-                x_roll = torch.roll(x, 1, dims = 1)
-                delta_x = x_roll - x
-                val = delta_x + eta / torch.abs(self.gamma_tv[i])
+                val = torch.matmul(x, self.Delta) + eta / torch.abs(self.gamma_tv[i])
                 thresh = torch.abs(self.lambda_tv[i] / self.gamma_tv[i])
                 return SoftThresh(val, thresh)
             else:
@@ -138,7 +137,7 @@ class LADMM(torch.nn.Module):
             resiual += torch.abs(self.gamma_l1[i]) * u_l1 - eta_l1
             add_item += torch.abs(self.gamma_l1[i]) * self.I
         if self.enble_tv == 1:
-            resiual += torch.abs(self.gamma_tv[i]) * u_tv - eta_tv
+            resiual += torch.matmul(torch.abs(self.gamma_tv[i]) * u_tv - eta_tv, self.DeltaT)
             add_item += torch.abs(self.gamma_tv[i]) * self.DeltaTDelta
         if self.enble_dwt == 1:
             resiual += torch.abs(self.gamma_dwt[i]) * u_dwt - eta_dwt
@@ -208,6 +207,7 @@ class LADMM(torch.nn.Module):
         self.A = self.A.to(device)
         self.I = self.I.to(device)
         self.Delta = self.Delta.to(device)
+        self.DeltaT = self.DeltaT.to(device)
         self.DeltaTDelta = self.DeltaTDelta.to(device)
         self.ATA = self.ATA.to(device)
 
