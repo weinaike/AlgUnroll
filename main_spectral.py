@@ -15,6 +15,11 @@ from meter import AverageMeter, Summary, ProgressMeter
 import random
 import numpy as np
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter('save') #建立一个保存数据用的东西，save是输出的文件名
+
+
  
 def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
 
@@ -58,6 +63,12 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
 
         if batch % 100 == 0:
             progress.display(batch)
+        writer = SummaryWriter(args.tb_name)  # 存放log文件的目录
+        writer.add_scalar('train/loss', loss, epoch)  # 画loss，横坐标为epoch
+        writer.add_scalar('train/lr', optimizer.param_groups[0]["lr"], epoch)
+        writer.close()
+
+
     return losses.avg
     
 def val(dataloader, model, loss_fn, epoch, device):
@@ -87,7 +98,9 @@ def val(dataloader, model, loss_fn, epoch, device):
     losses.update(test_loss, 1)
     # progress.display_summary()
     logging.info(f"Val: Avg loss: {test_loss:>8f}")
-
+    writer = SummaryWriter(args.tb_name)  # 存放log文件的目录
+    writer.add_scalar('val/loss', test_loss, epoch)  # 画loss，横坐标为epoch
+    writer.close()
     return test_loss
 
 
@@ -137,7 +150,7 @@ def main(args):
  
     # 3.模型加载, 并对模型进行微调
     size = training_data.get_size()
-    net = LADMM(mode=args.mode,sp_file=args.sp_file, iter= args.layer_num)
+    net = LADMM(mode=args.mode,sp_file=args.sp_file, iter= args.layer_num, filter= args.filter_num, ks=args.kernel_size)
     logging.info(net)
 
     if pretrained is not None:
@@ -156,6 +169,12 @@ def main(args):
 
     net = torch.nn.DataParallel(net, device_ids = gpu)
  
+
+    # dummy_input = torch.rand(8, 9)  # 网络中输入的数据维度
+    # target  = torch.rand(8, 282)  # 网络中输入的数据维度
+    # with SummaryWriter(comment='ADMM') as w:
+    #     w.add_graph(net, (dummy_input,target))  # net是你的网络名
+
     # 5.定义损失函数，以及优化器
     # criterion = torch.nn.CrossEntropyLoss()
     # criterion = torch.nn.L1Loss(reduction='sum')
@@ -235,12 +254,17 @@ if __name__ == '__main__':
                         help='have_noise') 
     parser.add_argument('--sig_min', default=200, type=int, help='low value sigma of gauss line shape')  
     parser.add_argument('--sig_max', default=500, type=int, help='high value sigma of gauss line shape')  
+
+
+    parser.add_argument('--filter_num', default=32, type=int, help='num of filter for cnn regular')  
+    parser.add_argument('--kernel_size', default=3, type=int, help='kernel_size for cnn regular')      
     args = parser.parse_args()
 
 
     now = datetime.datetime.now()
     time_name = now.strftime("%Y%m%d%H%M%S")
     args.time_name = time_name
+    args.tb_name = "runs/logs_{}".format(time_name)
 
     time_path = os.path.join("debug", time_name)
     if not os.path.exists(time_path):
@@ -250,6 +274,7 @@ if __name__ == '__main__':
                         handlers=[logging.FileHandler(args.log_file,mode="w"), logging.StreamHandler(),
                                   logging.FileHandler("{}/{}".format(time_path, args.log_file.split("/")[-1]),mode="w")])
     logging.info("{}".format(vars(args)))
+
     main(args)
 
 

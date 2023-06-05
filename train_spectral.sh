@@ -1,15 +1,17 @@
 python main_spectral.py \
--b 8 \
+-b 4 \
 -j 4 \
 -lr 1e-2 \
 --steps 50 \
 --epochs 60 \
---mode l1_tv \
+--mode l1_tv_cnn \
 --model_file save_model/spectral_fc_01.pth \
 --sp_file data/SpectralResponse_9.npy \
 --data_path data/SpectralResponse_9_1024 \
---layer_num 30 \
---gpu 0 \
+--layer_num 50 \
+--gpu 1 \
 --log_file "save_model/spectral_fc_01.log" \
 --sig_min 200 \
---sig_max 201
+--sig_max 201 \
+--filter_num 32 \
+--kernel_size 5

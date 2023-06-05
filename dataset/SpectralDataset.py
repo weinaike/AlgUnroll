@@ -26,7 +26,7 @@ class SpectralDataset(Dataset):
 
     def __init__(self, sp_file, train=True, have_noise = True, sig = [200,500]):
        
-        self.sample_count = 128
+        self.sample_count = 1024
         if train == False:
             self.sample_count = 256
 
