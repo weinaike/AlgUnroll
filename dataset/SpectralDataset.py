@@ -101,9 +101,9 @@ class MultiSpectralDataset(Dataset):
 
     def __init__(self, sp_file, train=True, have_noise = True, sig = [200,500]):
        
-        self.sample_count = 8192
+        self.sample_count = 128
         if train == False:
-            self.sample_count = 256
+            self.sample_count = 128
         
         self.sp = np.load(sp_file)
         self.length, self.det_num = self.sp.shape
@@ -117,8 +117,7 @@ class MultiSpectralDataset(Dataset):
     def __getitem__(self, idx):
         spectral = np.zeros(self.x.shape)
 
-        for i in range(2):
-
+        for i in range(4):
             center = random.uniform(400,3500)
             # center = random.uniform(1000,1100)
             sigma = random.uniform(self.sig_min,self.sig_max)
@@ -137,20 +136,20 @@ if __name__ == '__main__':
     start = time.time()
     sp_file = "data/SpectralResponse_9.npy"
 
-    data = SpectralDataset(sp_file, train=True, have_noise = False )
+    data = MultiSpectralDataset(sp_file, train=True, have_noise = False, sig = [10,200] )
     print(data.get_size())
 
     det_list = list()
     sp_list = list()
-    for i in range(256):
+    for i in range(1024):
         det, sp = data.__getitem__(i)
         det_list.append(det.numpy())
         sp_list.append(sp.numpy())
-    path = "data/SpectralResponse_9_1024/"
+    path = "data/SpectralResponse_9_1024_multi/"
     if not os.path.exists(path):
         os.mkdir(path)
-    np.save("{}/compress_val.npy".format(path), det_list)
-    np.save("{}/spectral_val.npy".format(path), sp_list)
+    np.save("{}/compress.npy".format(path), det_list)
+    np.save("{}/spectral.npy".format(path), sp_list)
 
     # print(det)
     # end = time.time()

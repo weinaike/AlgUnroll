@@ -136,7 +136,6 @@ def main(args):
 
     logging.info("Batch_Size: {}".format(Batch_Size))
     
-    sig = [args.sig_min, args.sig_max]
     training_data = SpectralFileDataset(args.sp_file, train=True, data_path=args.data_path)
     val_data = SpectralFileDataset(args.sp_file, train=False,  data_path=args.data_path)
 
