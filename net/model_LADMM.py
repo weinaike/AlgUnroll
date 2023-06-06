@@ -5,7 +5,7 @@ from .model_block import SoftThresh, RegularBlock
 
 
 class LADMM(torch.nn.Module):
-    def __init__(self, mode = "only_tv", sp_file = "data/SpectralResponse_9.npy", iter = 5, filter = 32, ks = 3):
+    def __init__(self, mode = "only_tv", psf_file = "data/pdf.tiff", iter = 5, filter = 32, ks = 3):
         super(LADMM, self).__init__()
         self.layer_num = iter
         # 步长(二次惩罚项惩罚因子)
@@ -27,7 +27,7 @@ class LADMM(torch.nn.Module):
         self.sigma = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))              # for g(z)
         self.xi = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))                 # I+(w)
 
-        self.A = torch.transpose(torch.tensor(np.load(sp_file), dtype=torch.float), 0, 1)
+        self.A = torch.transpose(torch.tensor(np.load(psf_file), dtype=torch.float), 0, 1)
         sz = self.A.size()
 
         self.I = torch.eye(sz[1])

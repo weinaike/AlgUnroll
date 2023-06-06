@@ -11,13 +11,11 @@ def SoftThresh(val, thresh):
 class RegularBlock(torch.nn.Module):
     def __init__(self, filter = 32,  kernel_size = 3):
         super(RegularBlock, self).__init__()
-        self.block = torch.nn.Sequential(torch.nn.Conv1d(1, filter, kernel_size=kernel_size, padding = kernel_size//2), 
+        self.block = torch.nn.Sequential(torch.nn.Conv2d(1, filter, kernel_size=kernel_size, padding = kernel_size//2), 
                                         torch.nn.ReLU(), 
-                                        torch.nn.Conv1d(filter, 1, kernel_size=kernel_size, padding = kernel_size//2))
-    def forward(self,x):
-        x = torch.unsqueeze(x, 1)
+                                        torch.nn.Conv2d(filter, 1, kernel_size=kernel_size, padding = kernel_size//2))
+    def forward(self,x):        
         x = self.block(x)
-        x = torch.squeeze(x)
         return x
 
 

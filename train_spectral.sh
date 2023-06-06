@@ -5,11 +5,11 @@ python main_spectral.py \
 --steps 50 \
 --epochs 60 \
 --mode tv_cnn \
---model_file save_model/spectral_fc_01.pth \
---sp_file data/SpectralResponse_9.npy \
---data_path data/SpectralResponse_9_1024_multi \
+--model_file save_model/admm_reconstruct.pth \
+--sp_file data/psf.tiff \
+--data_path data/diffuser \
 --layer_num 50 \
 --gpu 0 \
---log_file "save_model/spectral_admm.log" \
+--log_file "save_model/admm_reconstruct.log" \
 --filter_num 32 \
 --kernel_size 3

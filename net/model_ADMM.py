@@ -151,13 +151,9 @@ class ADMM(torch.nn.Module):
         return tau
 
 
-    def forward(self, target):
+    def forward(self, b):
         iter = 300
-        b = torch.matmul(self.A, target)
-
-        x = torch.randn_like(target)
-        sz = x.size()
-
+        x = torch.randn_like(b)
         eta_l1 = torch.zeros_like(x)
         eta_tv = torch.zeros_like(x)
         eta_dwt = torch.zeros_like(x)
@@ -181,18 +177,12 @@ class ADMM(torch.nn.Module):
 
 if __name__ == '__main__':
     admm = ADMM(mode="l1+tv")
-    import random
-    center = random.uniform(400,3500)
-    # center = random.uniform(1000,1100)
-    sigma = random.uniform(200,300)
-    sp = np.load("data/SpectralResponse_9.npy")
-    length, det_num = sp.shape
-    x = np.linspace(355,3735,length)
-    spectral = np.exp(-1 * (x - center)**2 / (sigma**2 ))
-
-    rex = admm.forward(torch.tensor(spectral,dtype=torch.float))
+    diffuser = "data/diffuser/im43.npy"
+    lensed = "data/lensed/im43.npy"
+    x = np.load(diffuser)
+    recon = admm.forward(torch.tensor(x,dtype=torch.float))
     import matplotlib.pylab as plt
     # plt.rcParams['figure.figsize'] = (8.0, 4.0) 
     plt.figure()
-    plt.plot(x, spectral,'b', x, rex,'r:')
+    plt.imshow(recon)
     plt.show()
