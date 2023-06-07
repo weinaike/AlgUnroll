@@ -58,8 +58,6 @@ class SpectralDataset(Dataset):
         return self.sample_count
 
     def __getitem__(self, idx):
-        if idx == 100:
-            print(self.detect[idx])
         return self.detect[idx], self.spectral[idx]
 
     def get_size(self):

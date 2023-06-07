@@ -112,7 +112,7 @@ def test(dataloader, model, device, epoch, args):
             num = num + 1
             X, y = X.to(device), y.to(device)
             pred = model(X,y)
-            if num > 1:
+            if num > 5:
                 break           
             cs = pred.detach().squeeze(0).cpu() 
             sp = y.detach().squeeze(0).cpu() 
