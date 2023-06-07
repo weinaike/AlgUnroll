@@ -1,14 +1,14 @@
 import torch
 import numpy as np
-from model_block import SoftThresh
+from .model_block import SoftThresh
 
 
 class ADMM(torch.nn.Module):
-    def __init__(self, mode = "only_tv"):
+    def __init__(self, mode = "only_tv", iter = 200, sp_file = None):
         # 步长
 
-        self.gamma_l1 = 10              # u_l1
-        self.gamma_tv = 10              # u_tv
+        self.gamma_l1 = 2              # u_l1
+        self.gamma_tv = 2              # u_tv
         self.gamma_dwt = 1              # u_dwt
         self.alpha = 5                  # w 
         self.beta =  5                  # g(z)        
@@ -20,7 +20,7 @@ class ADMM(torch.nn.Module):
         self.sigma = 0.0001             # for g(z)
         self.xi = 0.0001 # I+(w)
 
-       
+        self.iter = iter
         if mode == "only_tv":          
             self.gamma_l1 = 0
             self.gamma_dwt = 0
@@ -38,19 +38,19 @@ class ADMM(torch.nn.Module):
             self.lambda_dwt = 0
             self.sigma = 0
 
-        elif mode == "l1+tv":
+        elif mode == "l1_tv":
             self.gamma_dwt = 0
             self.beta = 0
 
             self.lambda_dwt = 0
             self.sigma = 0
-        elif mode == "tv+other":
+        elif mode == "tv_other":
             self.gamma_l1 = 0
             self.gamma_dwt = 0
 
             self.lambda_l1 = 0
             self.lambda_dwt = 0
-        elif mode =="l1+other":
+        elif mode =="l1_other":
             self.gamma_tv = 0
             self.gamma_dwt = 0
 
@@ -59,8 +59,10 @@ class ADMM(torch.nn.Module):
         else:
             print("mode [{}] is not support ".format(mode))
             assert(0)
+        if sp_file == None:
+            sp_file = "data/SpectralResponse_9.npy"
 
-        self.AT = torch.tensor(np.load("data/SpectralResponse_9.npy"), dtype=torch.float)
+        self.AT = torch.tensor(np.load(sp_file), dtype=torch.float)
         self.A = torch.transpose(self.AT, 0, 1)
 
         sz = self.A.size()
@@ -152,7 +154,7 @@ class ADMM(torch.nn.Module):
 
 
     def forward(self, target):
-        iter = 300
+        
         b = torch.matmul(self.A, target)
 
         x = torch.randn_like(target)
@@ -163,7 +165,7 @@ class ADMM(torch.nn.Module):
         eta_dwt = torch.zeros_like(x)
         rho = torch.zeros_like(x)
         tau = torch.zeros_like(x)
-        for i in range(iter):
+        for i in range(self.iter):
             u_l1 = self.update_ui(x, eta_l1, mode = "l1")
             u_tv = self.update_ui(x, eta_tv, mode = "tv")
             u_dwt = self.update_ui(x, eta_dwt, mode = "dwt")
@@ -179,20 +181,7 @@ class ADMM(torch.nn.Module):
 
         return x
 
-if __name__ == '__main__':
-    admm = ADMM(mode="l1+tv")
-    import random
-    center = random.uniform(400,3500)
-    # center = random.uniform(1000,1100)
-    sigma = random.uniform(200,300)
-    sp = np.load("data/SpectralResponse_9.npy")
-    length, det_num = sp.shape
-    x = np.linspace(355,3735,length)
-    spectral = np.exp(-1 * (x - center)**2 / (sigma**2 ))
 
-    rex = admm.forward(torch.tensor(spectral,dtype=torch.float))
-    import matplotlib.pylab as plt
-    # plt.rcParams['figure.figsize'] = (8.0, 4.0) 
-    plt.figure()
-    plt.plot(x, spectral,'b', x, rex,'r:')
-    plt.show()
+    
+    
+

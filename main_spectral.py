@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from dataset.SpectralDataset import SpectralFileDataset , MultiSpectralDataset
+from dataset.SpectralDataset import SpectralDataset
 import argparse
 import logging
 from torch.optim.lr_scheduler import StepLR, MultiStepLR
@@ -136,8 +136,9 @@ def main(args):
 
     logging.info("Batch_Size: {}".format(Batch_Size))
     
-    training_data = SpectralFileDataset(args.sp_file, train=True, data_path=args.data_path)
-    val_data = SpectralFileDataset(args.sp_file, train=False,  data_path=args.data_path)
+    sig = [args.sig_min, args.sig_max]
+    training_data = SpectralDataset(args.sp_file, train=True, have_noise=args.have_noise, sig=sig, peak_num=args.peak_num)
+    val_data = SpectralDataset(args.sp_file, train=False,  have_noise=args.have_noise, sig=sig, peak_num=args.peak_num)
 
 
     train_dataloader = DataLoader(training_data, batch_size=Batch_Size, shuffle=False, persistent_workers = True, prefetch_factor = 4, 
@@ -217,16 +218,10 @@ if __name__ == '__main__':
                         help='save model file path')
     parser.add_argument('--sp_file', default="data/SpectralResponse_9.npy", type=str, 
                         help='otf file path')
-    parser.add_argument('--qinit_file', default="data/qinit.npy", type=str, 
-                        help='qinit file path, size: 3380*9')   
-    parser.add_argument('--data_path', default="data/SpectralResponse_9_1024", type=str, 
-                        help='data_path, size: 3380*9')   
     parser.add_argument('--mode', default="l1+tv", type=str, 
                         help='mode only_l1, only_tv, l1_tv, l1_cnn')   
-    parser.add_argument('--multiple', default=2, type=int, 
-                        help='multiple of chan')
     parser.add_argument('--layer_num', default=9, type=int, 
-                        help='layer num of ista')    
+                        help='layer num of net')    
     parser.add_argument('-j', '--workers', default=4, type=int,
                         help='number of data loading workers (default: 4)')
     parser.add_argument('--epochs', default=10, type=int, metavar='N',
@@ -249,10 +244,11 @@ if __name__ == '__main__':
                         help='GPU id to use.')
     parser.add_argument('--log_file', default="file.log", type=str,
                         help='log file path.')
-    parser.add_argument('--have_noise', default=True, type=lambda x: (str(x).lower() == 'true'),
+    parser.add_argument('--have_noise', default=False, type=lambda x: (str(x).lower() == 'true'),
                         help='have_noise') 
     parser.add_argument('--sig_min', default=200, type=int, help='low value sigma of gauss line shape')  
     parser.add_argument('--sig_max', default=500, type=int, help='high value sigma of gauss line shape')  
+    parser.add_argument('--peak_num', default=1, type=int, help='num of spectral peak')  
 
 
     parser.add_argument('--filter_num', default=32, type=int, help='num of filter for cnn regular')  
