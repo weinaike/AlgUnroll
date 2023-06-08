@@ -44,9 +44,24 @@ class LADMM(torch.nn.Module):
         self.set_enble(mode)
 
         self.k_iter = 3
-        self.blocks = list()
+        self.blocks = torch.nn.ModuleList()
         for i in range(iter * self.k_iter):
             self.blocks.append(RegularBlock(filter, ks))
+        self.param = self.set_param_list()
+    def set_param_list(self):
+        param = torch.nn.ParameterList()
+        param.append(self.gamma_l1)
+        param.append(self.gamma_tv)
+        param.append(self.gamma_dwt)
+        param.append(self.alpha)
+        param.append(self.beta)
+        param.append(self.s)
+        param.append(self.lambda_l1)
+        param.append(self.lambda_tv)
+        param.append(self.lambda_dwt)
+        param.append(self.sigma)
+        param.append(self.xi)
+        return param
 
     # set regular enble
     def set_enble(self,mode):

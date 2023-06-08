@@ -36,6 +36,7 @@ class SpectralDataset(Dataset):
     def generate_random(self, sample_count, num = 1):
         detect_list = list()
         spectral_list = list()
+        num = random.choice(range(num)) + 1
         for i in range(sample_count):
             spectral = np.zeros(self.x.shape)
 
