@@ -202,8 +202,8 @@ def main(args):
                 'best_acc': best_acc,
                 'optimizer' : optimizer.state_dict()
             }
-        if epoch % 10 == 9:
-            test(test_dataloader, net, device, epoch, args)
+        # if epoch % 10 == 9:
+        #     test(test_dataloader, net, device, epoch, args)
         if is_best:
             # torch.save(state_dict, filename)
             save_file = os.path.join(args.time_path, args.model_file.split("/")[-1])
