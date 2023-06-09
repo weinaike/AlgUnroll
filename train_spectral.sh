@@ -6,11 +6,12 @@ python main_spectral.py \
 --epochs 60 \
 --mode l1_tv_cnn \
 --layer_num 50 \
+--k_iter 3 \
 --model_file save_model/spectral_fc_01.pth \
---sp_file data/SpectralResponse_9_3380.npy \
---peak_num 1 \
---sig_min 5 \
---sig_max 20 \
+--sp_file data/SpectralResponse_9.npy \
+--peak_num 2 \
+--sig_min 20 \
+--sig_max 50 \
 --gpu 1 \
 --log_file "save_model/spectral_admm.log" \
 --filter_num 32 \

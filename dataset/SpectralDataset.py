@@ -40,12 +40,20 @@ class SpectralDataset(Dataset):
             num = random.choice(range(num)) + 1
         for i in range(sample_count):
             spectral = np.zeros(self.x.shape)
-
-            for j in range(num):
-                center = random.uniform(400,3500)
+            rn = random.choice([0,1]) #随机生成一半的相邻峰
+            if rn > 0:
+                center = random.uniform(700,3200)
                 sigma = random.uniform(self.sig_min,self.sig_max)
-                amp = random.uniform(0.2,1)
-                spectral += amp * np.exp(-1 * (self.x - center)**2 / (sigma**2 ))
+                for j in range(num):                                        
+                    amp = random.uniform(0.2,1)
+                    spectral += amp * np.exp(-1 * (self.x - center)**2 / (sigma**2 ))
+                    center = center + sigma * 2.5
+            else:
+                for j in range(num):
+                    center = random.uniform(400,3500)
+                    sigma = random.uniform(self.sig_min,self.sig_max)
+                    amp = random.uniform(0.2,1)
+                    spectral += amp * np.exp(-1 * (self.x - center)**2 / (sigma**2 ))
             spectral = spectral / np.max(spectral) 
             detect = np.matmul(spectral, self.sp)
 
