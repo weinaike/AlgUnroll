@@ -1,18 +1,20 @@
 python main_spectral.py \
 -b 4 \
 -j 4 \
--lr 1e-2 \
+-lr 1e-3 \
 --steps 50 \
 --epochs 60 \
 --mode l1_tv_cnn \
 --layer_num 50 \
 --k_iter 3 \
 --model_file save_model/spectral_fc_01.pth \
---sp_file data/SpectralResponse_9.npy \
+--sp_file data/SpectralResponse_9_512.npy \
 --peak_num 2 \
---sig_min 20 \
---sig_max 50 \
+--sig_min 10 \
+--sig_max 20 \
 --gpu 1 \
 --log_file "save_model/spectral_admm.log" \
 --filter_num 32 \
---kernel_size 3
+--kernel_size 3 \
+--has_res True \
+--pretrained debug/20230613164949/spectral_fc_01.pth

@@ -2,10 +2,12 @@ import torch
 from net.model_LADMM import LADMM
 import time
 import os
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import torch.optim as optim
 from torch.utils.data import DataLoader
-
+import collections
 from dataset.SpectralDataset import SpectralDataset
 import argparse
 import logging
@@ -17,7 +19,7 @@ import numpy as np
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from torch.utils.tensorboard import SummaryWriter
-writer = SummaryWriter('save') #建立一个保存数据用的东西，save是输出的文件名
+# writer = SummaryWriter('save') #建立一个保存数据用的东西，save是输出的文件名
 
 
  
@@ -46,8 +48,13 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
         # for model_fc
         pred_roll = torch.roll(pred, 1 , 1)
         loss_tv = loss_fn(pred, pred_roll)
-        gamma = torch.Tensor([0.5]).to(device) 
-        loss = loss_fn(pred, y) #+ torch.mul(gamma, loss_tv)
+        gamma = torch.Tensor([1]).to(device) 
+        mask = torch.abs(pred) > 0.02
+        loss = loss_fn(pred, y) + torch.mul(gamma, torch.mean(torch.masked_select(torch.pow(torch.sub(pred, y),2), mask)))
+        # loss = torch.mean(torch.mul(torch.pow(torch.sub(pred, y),2), y))
+
+
+        
 
         logging.debug("loss per batch:{},  loss_tv:{}\n".format(loss.item(), loss_tv)) 
         losses.update(loss.item(), X.size(0))
@@ -150,12 +157,18 @@ def main(args):
  
     # 3.模型加载, 并对模型进行微调
     size = training_data.get_size()
-    net = LADMM(mode=args.mode,sp_file=args.sp_file, iter= args.layer_num, filter= args.filter_num, ks=args.kernel_size, k_iter=args.k_iter)
+    net = LADMM(mode=args.mode,sp_file=args.sp_file, iter= args.layer_num, filter= args.filter_num, ks=args.kernel_size, k_iter=args.k_iter, has_res = args.has_res)
     logging.info(net)
 
     if pretrained is not None:
-        dict = torch.load(pretrained)
-        net.load_state_dict(dict["state_dict"])
+        dict = torch.load(pretrained,map_location=torch.device('cpu'))
+        print("epoch",dict['epoch'])
+        new_state_dict = collections.OrderedDict()
+        for k, v in dict["state_dict"].items():
+            name = k[7:] # remove 'module.' prefix
+            new_state_dict[name] = v
+        net.load_state_dict(new_state_dict, strict = False)
+ 
 
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device_name = ('cuda:{}'.format(gpu[0]) if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -185,7 +198,7 @@ def main(args):
     best_acc = torch.inf
     logging.info("Epoches:  {}".format(Epoches))
     scheduler = MultiStepLR(optimizer, milestones=args.steps, gamma=args.gamma)
-    torch.autograd.set_detect_anomaly(True)
+    # torch.autograd.set_detect_anomaly(True)
     for epoch in range(Epoches):
         # setup_seed(20)
         logging.info("learning ratio: {}".format(scheduler.get_last_lr()))
@@ -246,6 +259,8 @@ if __name__ == '__main__':
                         help='log file path.')
     parser.add_argument('--have_noise', default=False, type=lambda x: (str(x).lower() == 'true'),
                         help='have_noise') 
+    parser.add_argument('--has_res', default=False, type=lambda x: (str(x).lower() == 'true'),
+                        help='has_res')     
     parser.add_argument('--sig_min', default=200, type=int, help='low value sigma of gauss line shape')  
     parser.add_argument('--sig_max', default=500, type=int, help='high value sigma of gauss line shape')  
     parser.add_argument('--peak_num', default=1, type=int, help='num of spectral peak')  

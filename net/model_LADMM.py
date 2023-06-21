@@ -1,11 +1,11 @@
 
 import torch
 import numpy as np
-from .model_block import SoftThresh, RegularBlock
+from .model_block import SoftThresh, RegularBlock, CausalSelfAttention
 
 
 class LADMM(torch.nn.Module):
-    def __init__(self, mode = "only_tv", sp_file = "data/SpectralResponse_9.npy", iter = 5, filter = 32, ks = 3, k_iter = 3):
+    def __init__(self, mode = "only_tv", sp_file = "data/SpectralResponse_9.npy", iter = 5, filter = 32, ks = 3, k_iter = 3, has_res = False):
         super(LADMM, self).__init__()
         self.layer_num = iter
         # 步长(二次惩罚项惩罚因子)
@@ -48,6 +48,11 @@ class LADMM(torch.nn.Module):
         for i in range(iter * self.k_iter):
             self.blocks.append(RegularBlock(filter, ks))
         self.param = self.set_param_list()
+
+        self.has_res = has_res
+        if has_res:
+            self.res = CausalSelfAttention(num_heads=4, embed_dimension=sz[1], bias=False, is_causal=True, dropout=0.1)
+
     def set_param_list(self):
         param = torch.nn.ParameterList()
         param.append(self.gamma_l1)
@@ -200,7 +205,7 @@ class LADMM(torch.nn.Module):
         eta_dwt = torch.zeros_like(x)
         rho = torch.zeros_like(x)
         tau = torch.zeros_like(x)
-
+        # with torch.no_grad():
         for i in range(self.layer_num):
             u_l1 = self.update_ui(i, x, eta_l1, mode = "l1")
             u_tv = self.update_ui(i, x, eta_tv, mode = "tv")
@@ -215,7 +220,8 @@ class LADMM(torch.nn.Module):
             eta_dwt = self.update_eta(i, x, u_dwt, eta_dwt, mode="dwt")
             rho = self.update_rho(i, x, z, rho)
             tau = self.update_tau(i, x, w, tau)
-        
+        if self.has_res:
+            x = x + self.res(x)
         return x
     def to(self, device):
         super(LADMM, self).to(device)
