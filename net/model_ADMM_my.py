@@ -1,3 +1,4 @@
+#整体而言， ||Ax-b||不拆开的效果不然拆开的效果
 import torch
 import numpy as np
 from model_block import SoftThresh
@@ -8,14 +9,13 @@ class ADMM(torch.nn.Module):
         # 步长
         self.iter = iters
         self.disp = disp
-        self.gamma_l1 = 1e-4                # u_l1
-        self.gamma_tv = 1e-4               # u_tv
-        self.alpha = 5e-4                 # w 
-        self.delta = 5e-5                  # M
+        self.gamma_l1 = 0.01                # u_l1
+        self.gamma_tv = 0.02               # u_tv
+        self.alpha = 0.1                # w 
   
         ## 拉格朗日乘子
-        self.lambda_l1 = 1.0e-4             # u_l1
-        self.lambda_tv = 5.0e-5             # u_tv
+        self.lambda_l1 = 1             # u_l1
+        self.lambda_tv = 0.01            # u_tv
 
         if mode == "tv":          
             self.gamma_l1 = 0
@@ -46,7 +46,7 @@ class ADMM(torch.nn.Module):
 
         self.DeltaTDelta = self.precompute_DeltaTDelta()
 
-        self.inv_item = 1.0/(self.delta * self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
+        self.inv_item = 1.0/(self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
 
         self.autotune = autotune
 
@@ -56,7 +56,7 @@ class ADMM(torch.nn.Module):
 
 
     def update_inv(self):
-        self.inv_item = 1.0/(self.delta * self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
+        self.inv_item = 1.0/(self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
 
     def update_param(self, mu, primal_res, dual_res):
         if primal_res > self.res_tol * dual_res:
@@ -131,9 +131,9 @@ class ADMM(torch.nn.Module):
         return torch.maximum(val,torch.tensor(0))
     
 
-    def update_x(self, b, u_l1, eta_l1, u_tv, eta_tv, w, tau, v, theta):
-        diff = self.delta * v - theta
-        resiual = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(diff)) * torch.conj(self.H_fft))))
+    def update_x(self, b, u_l1, eta_l1, u_tv, eta_tv, w, tau):
+        resiual = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(b)) * torch.conj(self.H_fft))))
+        # resiual = self.Pad(self.Crop(resiual))
         if self.gamma_l1 !=0 :
             resiual += (torch.mul(self.gamma_l1, u_l1) - eta_l1) 
         if self.gamma_tv != 0:
@@ -147,13 +147,6 @@ class ADMM(torch.nn.Module):
         x =  torch.real(torch.fft.fftshift(torch.fft.ifft2(freq_space_result)))
         return x
         
-
-    def update_v(self,x, b, theta):
-        v = b + theta + self.delta * self.PSF(x)
-        inv = 1/(self.Pad(self.Crop(torch.ones_like(v))) + self.delta)
-        v = torch.mul(inv, v)
-        return v
-
 
     def update_eta(self, x, u, eta, mode = "tv"):
         if mode == "l1":
@@ -170,10 +163,6 @@ class ADMM(torch.nn.Module):
         tau += torch.mul(self.alpha, (x - w))
         return tau
    
-    def update_theta(self, x, v, theta):
-        theta += torch.mul(self.delta, (self.PSF(x) - v))
-        return theta
-
     def forward(self, b):
 
         b = self.Pad(b)
@@ -181,19 +170,18 @@ class ADMM(torch.nn.Module):
         eta_l1 = torch.zeros(self.full_sz)
         eta_tv = torch.zeros_like(self.Delta(x))
         tau = torch.zeros(self.full_sz)
-        theta = torch.zeros(self.full_sz)
+        sigma = torch.zeros(self.full_sz)
 
         for i in range(self.iter):
             x_pre = x
             u_l1 = self.update_ui(x, eta_l1, mode = "l1")
             u_tv = self.update_ui(x, eta_tv, mode = "tv")
-            v = self.update_v(x, b, theta)     
+
             w = self.update_w(x, tau) 
-            x = self.update_x(b, u_l1, eta_l1, u_tv, eta_tv, w, tau, v, theta)                      
+            x = self.update_x(b, u_l1, eta_l1, u_tv, eta_tv, w, tau)                      
 
             eta_l1 = self.update_eta(x, u_l1, eta_l1, mode="l1")
             eta_tv = self.update_eta(x, u_tv, eta_tv, mode="tv")
-            theta  = self.update_theta(x, v, theta)
             tau    = self.update_tau(x, w, tau)           
             
             if self.autotune:
@@ -210,13 +198,6 @@ class ADMM(torch.nn.Module):
                 primal_res_tv = torch.sqrt(torch.norm(Dx[:,:,0] -u_tv[:,:,0]) ** 2 + torch.norm(Dx[:,:,1] -u_tv[:,:,1]) ** 2  ) 
                 dual_res_tv = torch.sqrt(torch.norm(Dx[:,:,0] -Dx_pre[:,:,0]) ** 2 + torch.norm(Dx[:,:,1] -Dx_pre[:,:,1]) ** 2  ) * self.gamma_tv
                 self.gamma_tv = self.update_param(self.gamma_tv, primal_res_tv, dual_res_tv)
-
-
-                Ax = self.PSF(x)
-                Ax_pre= self.PSF(x_pre)
-                primal_res_v = torch.norm(Ax-v)
-                dual_res_v = torch.norm((Ax - Ax_pre)) * self.delta
-                self.delta = self.update_param(self.delta, primal_res_v, dual_res_v) 
                 
                 self.update_inv()
                 
@@ -227,7 +208,7 @@ class ADMM(torch.nn.Module):
                 plt.show(block=False)
                 plt.pause(2) # 显示1s
                 plt.close()
-        print("alpha: {} gamma_l1: {} gamma_tv:{} delta:{}".format(self.alpha, self.gamma_l1, self.gamma_tv, self.delta))
+        print("alpha: {} gamma_l1: {} gamma_tv:{}".format(self.alpha, self.gamma_l1, self.gamma_tv))
         return self.Crop(x)
 
 if __name__ == '__main__':
@@ -241,7 +222,7 @@ if __name__ == '__main__':
 
     iter = 100
     for i in range(ch):
-        admm = ADMM(psf_file, mode="tv", iters = iter, senor_size =[w,h], rgb_idx = i, disp = iter, autotune=True)
+        admm = ADMM(psf_file, mode="l1_tv", iters = iter, senor_size =[w,h], rgb_idx = i, disp = iter, autotune=True)
         data = compress_img[:,:,i]
         data /= np.linalg.norm(data.ravel(),ord=2) #这种方式归一化后，均值在0.002左右
         recon = np.array(admm.forward(torch.tensor(data,dtype=torch.float)))
