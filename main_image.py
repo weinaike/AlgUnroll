@@ -35,7 +35,7 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
         X, y = X.to(device), y.to(device)
 
         # Compute prediction error
-        pred = model(X,y)
+        pred = model(X)
 
         # logging.debug("pred per batch:{}\n".format(pred)) 
         # gamma = torch.Tensor([0.1]).to(device)

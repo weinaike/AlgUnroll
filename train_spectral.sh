@@ -1,4 +1,4 @@
-python main_spectral.py \
+python main_image.py \
 -b 4 \
 -j 4 \
 -lr 1e-2 \

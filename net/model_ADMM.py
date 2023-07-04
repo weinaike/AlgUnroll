@@ -11,7 +11,7 @@ class ADMM(torch.nn.Module):
         self.gamma_l1 = 1e-4                # u_l1
         self.gamma_tv = 1e-4               # u_tv
         self.alpha = 5e-4                 # w 
-        self.theta = 5e-5                  # M
+        self.delta = 5e-5                  # M
   
         ## 拉格朗日乘子
         self.lambda_l1 = 1.0e-4             # u_l1
@@ -45,7 +45,7 @@ class ADMM(torch.nn.Module):
 
         self.DeltaTDelta = self.precompute_DeltaTDelta()
 
-        self.inv_item = 1.0/(self.theta * self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
+        self.inv_item = 1.0/(self.delta * self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
 
         self.autotune = autotune
 
@@ -55,7 +55,7 @@ class ADMM(torch.nn.Module):
 
 
     def update_inv(self):
-        self.inv_item = 1.0/(self.theta * self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
+        self.inv_item = 1.0/(self.delta * self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
 
     def update_param(self, mu, primal_res, dual_res):
         if primal_res > self.res_tol * dual_res:
@@ -130,8 +130,8 @@ class ADMM(torch.nn.Module):
         return torch.maximum(val,torch.tensor(0))
     
 
-    def update_x(self, b, u_l1, eta_l1, u_tv, eta_tv, w, tau, v, sigma):
-        diff = self.theta * v - sigma
+    def update_x(self, b, u_l1, eta_l1, u_tv, eta_tv, w, tau, v, theta):
+        diff = self.delta * v - theta
         resiual = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(diff)) * torch.conj(self.H_fft))))
         if self.gamma_l1 !=0 :
             resiual += (torch.mul(self.gamma_l1, u_l1) - eta_l1) 
@@ -147,9 +147,9 @@ class ADMM(torch.nn.Module):
         return x
         
 
-    def update_v(self,x, b, sigma):
-        v = b + sigma + self.theta * self.PSF(x)
-        inv = 1/(self.Pad(self.Crop(torch.ones_like(v))) + self.theta)
+    def update_v(self,x, b, theta):
+        v = b + theta + self.delta * self.PSF(x)
+        inv = 1/(self.Pad(self.Crop(torch.ones_like(v))) + self.delta)
         v = torch.mul(inv, v)
         return v
 
@@ -169,9 +169,9 @@ class ADMM(torch.nn.Module):
         tau += torch.mul(self.alpha, (x - w))
         return tau
    
-    def update_sigma(self, x, v, sigma):
-        sigma += torch.mul(self.theta, (self.PSF(x) - v))
-        return sigma
+    def update_theta(self, x, v, theta):
+        theta += torch.mul(self.delta, (self.PSF(x) - v))
+        return theta
 
     def forward(self, b):
 
@@ -180,19 +180,19 @@ class ADMM(torch.nn.Module):
         eta_l1 = torch.zeros(self.full_sz)
         eta_tv = torch.zeros_like(self.Delta(x))
         tau = torch.zeros(self.full_sz)
-        sigma = torch.zeros(self.full_sz)
+        theta = torch.zeros(self.full_sz)
 
         for i in range(self.iter):
             x_pre = x
             u_l1 = self.update_ui(x, eta_l1, mode = "l1")
             u_tv = self.update_ui(x, eta_tv, mode = "tv")
-            v = self.update_v(x, b, sigma)     
+            v = self.update_v(x, b, theta)     
             w = self.update_w(x, tau) 
-            x = self.update_x(b, u_l1, eta_l1, u_tv, eta_tv, w, tau, v, sigma)                      
+            x = self.update_x(b, u_l1, eta_l1, u_tv, eta_tv, w, tau, v, theta)                      
 
             eta_l1 = self.update_eta(x, u_l1, eta_l1, mode="l1")
             eta_tv = self.update_eta(x, u_tv, eta_tv, mode="tv")
-            sigma  = self.update_sigma(x, v, sigma)
+            theta  = self.update_theta(x, v, theta)
             tau    = self.update_tau(x, w, tau)           
             
             if self.autotune:
@@ -214,8 +214,8 @@ class ADMM(torch.nn.Module):
                 Ax = self.PSF(x)
                 Ax_pre= self.PSF(x_pre)
                 primal_res_v = torch.norm(Ax-v)
-                dual_res_v = torch.norm((Ax - Ax_pre)) * self.theta
-                self.theta = self.update_param(self.theta, primal_res_v, dual_res_v) 
+                dual_res_v = torch.norm((Ax - Ax_pre)) * self.delta
+                self.delta = self.update_param(self.delta, primal_res_v, dual_res_v) 
                 
                 self.update_inv()
                 
@@ -226,7 +226,7 @@ class ADMM(torch.nn.Module):
                 plt.show(block=False)
                 plt.pause(2) # 显示1s
                 plt.close()
-        print("alpha: {} gamma_l1: {} gamma_tv:{} theta:{}".format(self.alpha, self.gamma_l1, self.gamma_tv, self.theta))
+        print("alpha: {} gamma_l1: {} gamma_tv:{} delta:{}".format(self.alpha, self.gamma_l1, self.gamma_tv, self.delta))
         return self.Crop(x)
 
 if __name__ == '__main__':
