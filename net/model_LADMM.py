@@ -35,7 +35,7 @@ class LADMM(torch.nn.Module):
         psf = torch.tensor(psf)  
 
 
-        self.sz = torch.Size(h, w)
+        self.sz = torch.Size([h, w])
         self.full_sz = torch.Size([self.sz[0]*2, self.sz[1]*2])
 
         self.H_fft = torch.fft.fft2(torch.fft.ifftshift(self.Pad(psf), dim=(-2, -1)))
@@ -132,7 +132,7 @@ class LADMM(torch.nn.Module):
         elif mode == "tv":
             if self.enble_tv == 1:
                 val = self.Delta(x) + eta / self.gamma_tv[i]
-                thresh =  self.lambda_tv[i] / self.gamma_tv[i]
+                thresh =  self.lamda_tv[i] / self.gamma_tv[i]
                 return SoftThresh(val, thresh)
             else:
                 return torch.zeros_like(self.Delta(x))
@@ -246,8 +246,8 @@ class LADMM(torch.nn.Module):
         self.DeltaTDelta = self.DeltaTDelta.to(device)
         self.MTM = self.MTM.to(device)
         self.H_fft = self.H_fft.to(device)
-        # self.sz = self.sz.to(device)
-        # self.full_sz = self.full_sz.to(device)
+        self.sz = self.sz.to(device)
+        self.full_sz = self.full_sz.to(device)
 
         for block in self.blocks:
             block.to(device)

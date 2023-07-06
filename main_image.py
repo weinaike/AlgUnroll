@@ -130,6 +130,14 @@ def main(args):
     workers = args.workers
 
     logging.info("Batch_Size: {}".format(Batch_Size))
+
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device_name = ('cuda:{}'.format(gpu[0]) if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    if len(gpu) > 1:
+        device_name = 'cuda'
+    logging.info("--------------using {}----------------".format(device_name))
+    device = torch.device(device_name)
+
     
     training_data = ImageFileDataset(args.data_path, train=True)
     val_data = ImageFileDataset(args.data_path, train=False)
@@ -149,13 +157,6 @@ def main(args):
     if pretrained is not None:
         dict = torch.load(pretrained)
         net.load_state_dict(dict["state_dict"])
-
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device_name = ('cuda:{}'.format(gpu[0]) if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-    if len(gpu) > 1:
-        device_name = 'cuda'
-    logging.info("--------------using {}----------------".format(device_name))
-    device = torch.device(device_name)
 
     # 4.pytorch fine tune 微调(冻结一部分层)。这里是冻结网络前30层参数进行训练。
     net.to(device)
