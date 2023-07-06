@@ -31,7 +31,7 @@ class ImageFileDataset(Dataset):
         self.sample_count = 0
         # path = "/media/ausu-x299/diffuserCam_dataset/"
         if train == True:
-            csv_file = os.path.join(path,"dataset_train_short.csv")    
+            csv_file = os.path.join(path,"dataset_train.csv")    
         else:
             csv_file = os.path.join(path,"dataset_test.csv")
 
@@ -39,6 +39,10 @@ class ImageFileDataset(Dataset):
         self.sample_count = len(self.csv_data)
 
         for item in self.csv_data:
+            if "tiff" not in item:
+                print(item, "is not exist")
+                continue
+
             item = item[:-9]+".npy"
             self.images.append(os.path.join(path,"diffuser_images",item))
             self.targets.append(os.path.join(path,"ground_truth_lensed", item))
