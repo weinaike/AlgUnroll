@@ -31,7 +31,7 @@ class LADMM(torch.nn.Module):
         psf = np.array(im,dtype='float32')
         h, w, c = psf.shape
         for i in range(c):        
-            psf[:,:,c] /= np.linalg.norm(psf[:,:,c].ravel())
+            psf[:,:,i] /= np.linalg.norm(psf[:,:,i].ravel())
         psf = torch.tensor(psf)  
 
 
