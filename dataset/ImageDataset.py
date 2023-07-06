@@ -35,7 +35,7 @@ class ImageFileDataset(Dataset):
         else:
             csv_file = os.path.join(path,"dataset_test.csv")
 
-        self.csv_data = np.loadtxt(open(csv_file,"rb"),dtype=str)             
+        self.csv_data = np.loadtxt(open(csv_file,"rb"),dtype=str,usecols=[0])             
         self.sample_count = len(self.csv_data)
 
         for item in self.csv_data:
