@@ -30,6 +30,7 @@ class LADMM(torch.nn.Module):
         im = im.resize(senor_size)
         psf = np.array(im,dtype='float32')
         h, w, c = psf.shape
+        print(h,w,c)
         for i in range(c):        
             psf[:,:,i] /= np.linalg.norm(psf[:,:,i].ravel())
         psf = torch.tensor(psf)  
@@ -132,7 +133,7 @@ class LADMM(torch.nn.Module):
         elif mode == "tv":
             if self.enble_tv == 1:
                 val = self.Delta(x) + eta / self.gamma_tv[i]
-                thresh =  self.lamda_tv[i] / self.gamma_tv[i]
+                thresh =  self.lambda_tv[i] / self.gamma_tv[i]
                 return SoftThresh(val, thresh)
             else:
                 return torch.zeros_like(self.Delta(x))
@@ -246,8 +247,6 @@ class LADMM(torch.nn.Module):
         self.DeltaTDelta = self.DeltaTDelta.to(device)
         self.MTM = self.MTM.to(device)
         self.H_fft = self.H_fft.to(device)
-        self.sz = self.sz.to(device)
-        self.full_sz = self.full_sz.to(device)
 
         for block in self.blocks:
             block.to(device)
