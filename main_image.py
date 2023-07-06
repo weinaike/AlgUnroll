@@ -111,15 +111,10 @@ def test(dataloader, model, device, epoch, args):
         for X, y in dataloader:
             num = num + 1
             X, y = X.to(device), y.to(device)
-            pred = model(X,y)
+            pred = model(X)
             if num > 1:
                 break           
-            cs = pred.detach().squeeze(0).cpu() 
-            sp = y.detach().squeeze(0).cpu() 
-            x = torch.linspace(355,3735, sp.size()[0])
-            plt.figure()
-            plt.plot(x,sp,"r", x,cs,"b")
-            plt.savefig(os.path.join(args.time_path,'spectral_reconstruct_{}_{}.jpg'.format(epoch,num)))
+            plt.savefig(os.path.join(args.time_path,'image_reconstruct_{}_{}.jpg'.format(epoch,num)))
             plt.close()
 
 
@@ -148,7 +143,6 @@ def main(args):
                                  drop_last=False)
  
     # 3.模型加载, 并对模型进行微调
-    size = training_data.get_size()
     net = LADMM(mode=args.mode,psf_file=args.psf_file, iter= args.layer_num,senor_size =[480,270], filter= args.filter_num, ks=args.kernel_size)
     logging.info(net)
 
@@ -202,7 +196,8 @@ def main(args):
                 'optimizer' : optimizer.state_dict()
             }
         if epoch % 10 == 9:
-            test(test_dataloader, net, device, epoch, args)
+            pass
+            # test(test_dataloader, net, device, epoch, args)
         if is_best:
             # torch.save(state_dict, filename)
             save_file = os.path.join(args.time_path, args.model_file.split("/")[-1])
