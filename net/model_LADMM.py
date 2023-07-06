@@ -3,7 +3,11 @@ import torch
 import numpy as np
 import PIL.Image as Image
 from .model_block import SoftThresh, RegularBlock
-
+import math
+def closest_power_of_two(n):
+    power = math.floor(math.log2(n)) + 1
+    result = 2 ** power
+    return result
 
 class LADMM(torch.nn.Module):
     def __init__(self, mode = "only_tv", psf_file = "data/pdf.tiff", iter = 5,  senor_size =[480,270], filter = 32, ks = 3):
@@ -37,7 +41,7 @@ class LADMM(torch.nn.Module):
 
 
         self.sz = torch.Size([h, w])
-        self.full_sz = torch.Size([self.sz[0]*2, self.sz[1]*2])
+        self.full_sz = torch.Size([closest_power_of_two(self.sz[0]*2), closest_power_of_two(self.sz[1]*2)])
 
         self.H_fft = torch.fft.fft2(torch.fft.ifftshift(self.Pad(psf), dim=(-2, -1)))
         self.MTM = (torch.abs(torch.conj(self.H_fft)*self.H_fft)) #这个需要再探讨
