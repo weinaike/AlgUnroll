@@ -6,8 +6,8 @@ python main_image.py \
 --epochs 60 \
 --mode tv_cnn \
 --model_file save_model/admm_reconstruct.pth \
---sp_file data/psf.tiff \
---data_path data/diffuser \
+--psf_file data/psf.tiff \
+--data_path /media/ausu-x299/diffuserCam_dataset/ \
 --layer_num 50 \
 --gpu 0 \
 --log_file "save_model/admm_reconstruct.log" \

@@ -136,8 +136,8 @@ def main(args):
 
     logging.info("Batch_Size: {}".format(Batch_Size))
     
-    training_data = ImageFileDataset(args.psf_file, train=True, data_path=args.data_path)
-    val_data = ImageFileDataset(args.psf_file, train=False,  data_path=args.data_path)
+    training_data = ImageFileDataset(args.data_path, train=True)
+    val_data = ImageFileDataset(args.data_path, train=False)
 
 
     train_dataloader = DataLoader(training_data, batch_size=Batch_Size, shuffle=False, persistent_workers = True, prefetch_factor = 4, 
@@ -149,7 +149,7 @@ def main(args):
  
     # 3.模型加载, 并对模型进行微调
     size = training_data.get_size()
-    net = LADMM(mode=args.mode,psf_file=args.psf_file, iter= args.layer_num, filter= args.filter_num, ks=args.kernel_size)
+    net = LADMM(mode=args.mode,psf_file=args.psf_file, iter= args.layer_num,senor_size =[480,270], filter= args.filter_num, ks=args.kernel_size)
     logging.info(net)
 
     if pretrained is not None:
@@ -217,8 +217,6 @@ if __name__ == '__main__':
                         help='save model file path')
     parser.add_argument('--psf_file', default="data/psf.tiff", type=str, 
                         help='otf file path')
-    parser.add_argument('--qinit_file', default="data/qinit.npy", type=str, 
-                        help='qinit file path, size: 3380*9')   
     parser.add_argument('--data_path', default="data/SpectralResponse_9_1024", type=str, 
                         help='data_path, size: 3380*9')   
     parser.add_argument('--mode', default="l1+tv", type=str, 
