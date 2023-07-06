@@ -35,11 +35,11 @@ class LADMM(torch.nn.Module):
         psf = torch.tensor(psf)  
 
 
-        self.sz = torch.Size(h,w)
+        self.sz = torch.Size(h, w)
         self.full_sz = torch.Size([self.sz[0]*2, self.sz[1]*2])
 
-        self.H_fft = torch.fft.fft2(torch.fft.ifftshift(self.Pad(psf)))
-        self.MTM = (torch.abs(torch.conj(self.H_fft)*self.H_fft))
+        self.H_fft = torch.fft.fft2(torch.fft.ifftshift(self.Pad(psf), dim=(-2, -1)))
+        self.MTM = (torch.abs(torch.conj(self.H_fft)*self.H_fft)) #这个需要再探讨
         self.DeltaTDelta = self.precompute_DeltaTDelta()
         
         self.enble_l1 = 1
@@ -105,7 +105,7 @@ class LADMM(torch.nn.Module):
         bottom = (self.full_sz[0] + self.sz[0])//2
         left = (self.full_sz[1] - self.sz[1])//2
         right = (self.full_sz[1] + self.sz[1])//2
-        return M[top:bottom,left:right]
+        return M[:,:,top:bottom,left:right]
 
     def Pad(self,b):
         v_pad = (self.full_sz[0] -  self.sz[0])//2
@@ -113,11 +113,11 @@ class LADMM(torch.nn.Module):
         return torch.nn.functional.pad(b,(h_pad,h_pad,v_pad,v_pad),"constant",0)
     
     def PSF(self, x):
-        Mx = torch.real(torch.fft.fftshift(torch.fft.ifft2((torch.fft.fft2(torch.fft.ifftshift(x)) * self.H_fft))))
+        Mx = torch.real(torch.fft.fftshift(torch.fft.ifft2((torch.fft.fft2(torch.fft.ifftshift(x,dim=(-2,-1))) * self.H_fft)),dim=(-2,-1)))
         return Mx
     
     def conjPSF(self,x):
-        MTx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x)) * torch.conj(self.H_fft))))
+        MTx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x, dim=(-2,-1))) * torch.conj(self.H_fft)),dim=(-2,-1)))
         return MTx
 
     # mode in ["l1", "tv", "dwt"]
@@ -174,7 +174,8 @@ class LADMM(torch.nn.Module):
             add_item += self.beta[i] * self.I
         
         freq_space_result = torch.fft.fft2(torch.fft.ifftshift(resiual))
-
+        batch = b.size()[0]
+        add_item = add_item.repeat(batch, self.c,1)
         x =  torch.real(torch.fft.fftshift(torch.fft.ifft2( 1.0/add_item *freq_space_result)))
         return x
     

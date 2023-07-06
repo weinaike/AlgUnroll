@@ -83,7 +83,7 @@ def val(dataloader, model, loss_fn, epoch, device):
     with torch.no_grad():
         for X, y in dataloader:
             X, y = X.to(device), y.to(device)
-            pred = model(X,y)
+            pred = model(X)
             # pred_max, pred_max_ind = torch.max(pred,dim=1)
             # y_max, y_max_ind = torch.max(pred, dim=1)
             # print(pred_max_ind, y_max_ind)
