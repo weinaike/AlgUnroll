@@ -113,7 +113,19 @@ def test(dataloader, model, device, epoch, args):
             X, y = X.to(device), y.to(device)
             pred = model(X)
             if num > 1:
-                break           
+                break      
+            img = X.detach().squeeze(0).permute(1,2,0).cpu().numpy()
+            rec = pred.detach().squeeze(0).permute(1,2,0).cpu().numpy()
+            target = y.detach().squeeze(0).permute(1,2,0).cpu().numpy()
+            for i in range(3):
+                img[:,:,i] = img[:,:,i]/np.max(img[:,:,i])
+                rec[:,:,i] = rec[:,:,i]/np.max(rec[:,:,i])
+                target[:,:,i] = target[:,:,i]/np.max(target[:,:,i])
+            plt.rcParams['figure.figsize'] = (20, 4.0)
+            fig, ax = plt.subplots(1,3)
+            ax[0].imshow(img)
+            ax[1].imshow(rec)
+            ax[2].imshow(target)
             plt.savefig(os.path.join(args.time_path,'image_reconstruct_{}_{}.jpg'.format(epoch,num)))
             plt.close()
 
@@ -159,10 +171,10 @@ def main(args):
         net.load_state_dict(dict["state_dict"])
 
     # 4.pytorch fine tune 微调(冻结一部分层)。这里是冻结网络前30层参数进行训练。
-    net.to(device)
 
-    net = torch.nn.DataParallel(net, device_ids = gpu)
+    net.to(device)
  
+    net = torch.nn.DataParallel(net, device_ids = gpu)
 
     # dummy_input = torch.rand(8, 9)  # 网络中输入的数据维度
     # target  = torch.rand(8, 282)  # 网络中输入的数据维度
@@ -172,7 +184,7 @@ def main(args):
     # 5.定义损失函数，以及优化器
     # criterion = torch.nn.CrossEntropyLoss()
     # criterion = torch.nn.L1Loss(reduction='sum')
-    criterion = torch.nn.MSELoss(reduction='mean')
+    criterion = torch.nn.MSELoss(reduction='sum')
 
     optimizer = optim.Adam(net.parameters(), lr=LR)    
     # optimizer = torch.optim.SGD(net.parameters(), lr=LR, momentum=0.9)
@@ -197,8 +209,7 @@ def main(args):
                 'optimizer' : optimizer.state_dict()
             }
         if epoch % 10 == 9:
-            pass
-            # test(test_dataloader, net, device, epoch, args)
+            test(test_dataloader, net, device, epoch, args)
         if is_best:
             # torch.save(state_dict, filename)
             save_file = os.path.join(args.time_path, args.model_file.split("/")[-1])

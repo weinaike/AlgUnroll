@@ -34,14 +34,15 @@ class LADMM(torch.nn.Module):
         im = im.resize(senor_size)
         psf = np.array(im,dtype='float32')
         h, w, c = psf.shape
-        print(h,w,c)
         for i in range(c):        
             psf[:,:,i] /= np.linalg.norm(psf[:,:,i].ravel())
-        psf = torch.tensor(psf)  
+        psf = torch.tensor(psf).permute(2,0,1)  
+        
 
-
+        self.c = c
         self.sz = torch.Size([h, w])
-        self.full_sz = torch.Size([closest_power_of_two(self.sz[0]*2), closest_power_of_two(self.sz[1]*2)])
+        #self.full_sz = torch.Size([closest_power_of_two(self.sz[0]*2), closest_power_of_two(self.sz[1]*2)])
+        self.full_sz = torch.Size([self.sz[0]*2, self.sz[1]*2])
 
         self.H_fft = torch.fft.fft2(torch.fft.ifftshift(self.Pad(psf), dim=(-2, -1)))
         self.MTM = (torch.abs(torch.conj(self.H_fft)*self.H_fft)) #这个需要再探讨
@@ -53,9 +54,30 @@ class LADMM(torch.nn.Module):
         self.set_enble(mode)
 
         self.k_iter = 3
-        self.blocks = list()
+        self.blocks = torch.nn.ModuleList()
         for i in range(iter * self.k_iter):
             self.blocks.append(RegularBlock(filter, ks))
+        self.param = self.set_param_list()
+
+        #self.has_res = has_res
+        #if has_res:
+        #    pass
+            #self.res = CausalSelfAttention(num_heads=4, embed_dimension=sz[1], bias=False, is_causal=True, dropout=0.1)
+
+    def set_param_list(self):
+        param = torch.nn.ParameterList()
+        param.append(self.gamma_l1)
+        param.append(self.gamma_tv)
+        param.append(self.alpha)
+        param.append(self.beta)
+        param.append(self.delta)
+        param.append(self.s)
+        param.append(self.lambda_l1)
+        param.append(self.lambda_tv)
+        param.append(self.sigma)
+        param.append(self.xi)
+        return param
+
 
     # set regular enble
     def set_enble(self,mode):
@@ -92,7 +114,7 @@ class LADMM(torch.nn.Module):
         PsiTPsi[0,0] = 4
         PsiTPsi[0,1] = PsiTPsi[1,0] = PsiTPsi[0,-1] = PsiTPsi[-1,0] = -1
         PsiTPsi = np.abs(torch.fft.fft2(PsiTPsi))
-        return PsiTPsi
+        return PsiTPsi.repeat(self.c,1,1)
     
     def Delta(self, img):
         return torch.stack((torch.roll(img,1,dims=2) - img, torch.roll(img,1,dims=3) - img), dim=4)
@@ -118,11 +140,13 @@ class LADMM(torch.nn.Module):
         return torch.nn.functional.pad(b,(h_pad,h_pad,v_pad,v_pad),"constant",0)
     
     def PSF(self, x):
-        Mx = torch.real(torch.fft.fftshift(torch.fft.ifft2((torch.fft.fft2(torch.fft.ifftshift(x,dim=(-2,-1))) * self.H_fft)),dim=(-2,-1)))
+        H_fft = self.H_fft.repeat(x.size()[0],1,1,1)
+        Mx = torch.real(torch.fft.fftshift(torch.fft.ifft2((torch.fft.fft2(torch.fft.ifftshift(x,dim=(-2,-1))) * H_fft), dim=(-2,-1))))
         return Mx
     
-    def conjPSF(self,x):
-        MTx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x, dim=(-2,-1))) * torch.conj(self.H_fft)),dim=(-2,-1)))
+    def conjPSF(self,x):        
+        H_fft = self.H_fft.repeat(x.size()[0],1,1,1)
+        MTx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x, dim=(-2,-1))) * torch.conj(H_fft),dim=(-2,-1))))
         return MTx
 
     # mode in ["l1", "tv", "dwt"]
@@ -158,7 +182,7 @@ class LADMM(torch.nn.Module):
             mu_3 =  (self.sigma[i])
             z = x + rho /  (self.beta[i])
             for j in range(k_iter):
-                z = (1 - mu_2) * z  + mu_2 * (x + rho / self.beta[i]) - mu_3 * self.blocks[i * k_iter + j](z)
+                z = (1 - mu_2) * z  + mu_2 * (x + rho / self.beta[i])# - mu_3 * self.blocks[i * k_iter + j](z)
                 # print(z)
             return z
         else:
@@ -176,17 +200,17 @@ class LADMM(torch.nn.Module):
             add_item +=  self.gamma_tv[i] * self.DeltaTDelta
         if self.enble_cnn == 1:
             resiual +=  self.beta[i] * z - rho
-            add_item += self.beta[i] * self.I
-        
+            add_item += self.beta[i]
         freq_space_result = torch.fft.fft2(torch.fft.ifftshift(resiual))
         batch = b.size()[0]
-        add_item = add_item.repeat(batch, self.c,1)
+        add_item = add_item.repeat(batch, 1,1,1)
         x =  torch.real(torch.fft.fftshift(torch.fft.ifft2( 1.0/add_item *freq_space_result)))
         return x
     
 
     def update_v(self, i, x, b, theta):
         v = b + theta + self.delta[i] * self.PSF(x)
+
         inv = 1/(self.Pad(self.Crop(torch.ones_like(v))) + self.delta[i])
         v = torch.mul(inv, v)
         return v
@@ -220,7 +244,6 @@ class LADMM(torch.nn.Module):
         return theta
 
     def forward(self, b):
-
         b = self.Pad(b)
         x = torch.zeros_like(b)
         eta_l1 = torch.zeros_like(x)
@@ -232,6 +255,7 @@ class LADMM(torch.nn.Module):
         for i in range(self.layer_num):
             u_l1 = self.update_ui(i, x, eta_l1, mode = "l1")
             u_tv = self.update_ui(i, x, eta_tv, mode = "tv")
+            
             v = self.update_v(i, x, b, theta)   
             w = self.update_w(i, x, tau)
             z = self.update_z(i, x, rho, k_iter=self.k_iter)
@@ -244,15 +268,11 @@ class LADMM(torch.nn.Module):
             rho = self.update_rho(i, x, z, rho)
             tau = self.update_tau(i, x, w, tau)
         
-        return x
-    def to(self, device):
+        return  self.Crop(x)
+    def to(self,device):
         super(LADMM, self).to(device)
-
-        self.DeltaTDelta = self.DeltaTDelta.to(device)
-        self.MTM = self.MTM.to(device)
         self.H_fft = self.H_fft.to(device)
+        self.MTM = self.MTM.to(device) 
+        self.DeltaTDelta = self.DeltaTDelta.to(device)
 
-        for block in self.blocks:
-            block.to(device)
 
-        return self

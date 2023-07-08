@@ -36,7 +36,6 @@ class ImageFileDataset(Dataset):
             csv_file = os.path.join(path,"dataset_test.csv")
 
         self.csv_data = np.loadtxt(open(csv_file,"rb"),dtype=str,usecols=[0])             
-        self.sample_count = len(self.csv_data)
 
         for item in self.csv_data:
             if "tiff" not in item:
@@ -44,9 +43,15 @@ class ImageFileDataset(Dataset):
                 continue
 
             item = item[:-9]+".npy"
-            self.images.append(os.path.join(path,"diffuser_images",item))
-            self.targets.append(os.path.join(path,"ground_truth_lensed", item))
+            img_file = os.path.join(path,"diffuser_images",item)
+            gt_file = os.path.join(path,"ground_truth_lensed", item)
+            if os.path.exists(img_file) and os.path.exists(gt_file):
+                self.images.append(img_file)
+                self.targets.append(gt_file)
+            else:
+                print(item, "is not exists")
 
+        self.sample_count = len(self.images)
     def __len__(self):
         return self.sample_count
 
@@ -55,7 +60,15 @@ class ImageFileDataset(Dataset):
         img = np.load(self.images[idx])
         target = np.load(self.targets[idx])
 
-        return torch.tensor(img).float(),  torch.tensor(target).float()
+
+        h, w, c = img.shape
+        for i in range(c):
+            img[:,:,i] /= np.linalg.norm(img[:,:,i].ravel())
+            target[:,:,i] /= np.linalg.norm(target[:,:,i].ravel())
+
+
+
+        return torch.tensor(img).float().permute(2,0,1),  torch.tensor(target).float().permute(2,0,1)
 
 
 if __name__ == '__main__':
@@ -65,9 +78,11 @@ if __name__ == '__main__':
     data = ImageFileDataset(path, train=True)
     for i in range(3):
         img, target = data.__getitem__(i)
+        print(img.size())
+        print(target.size())
         fig, axis = plt.subplots(1,2)
         axis[0].imshow(img)
         axis[1].imshow(target)
-        plt.savefig("a_{}.png".format(i))
+        #plt.savefig("a_{}.png".format(i))
     end = time.time()
     print(end-start)
