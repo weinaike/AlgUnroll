@@ -44,12 +44,12 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
         # loss = loss_fn(pred, y) + torch.mul(gamma, sysloss) #+ loss_tv
         # loss = torch.minimum(loss, torch.tensor(20))
         # for model_fc
-        pred_roll = torch.roll(pred, 1 , 1)
-        loss_tv = loss_fn(pred, pred_roll)
-        gamma = torch.Tensor([0.5]).to(device) 
+        #red_roll = torch.roll(pred, 1 , 1)
+        #loss_tv = loss_fn(pred, pred_roll)
+        #gamma = torch.Tensor([0.5]).to(device)
         loss = loss_fn(pred, y) #+ torch.mul(gamma, loss_tv)
 
-        logging.debug("loss per batch:{},  loss_tv:{}\n".format(loss.item(), loss_tv)) 
+        logging.debug("loss per batch:{}\n".format(loss))
         losses.update(loss.item(), X.size(0))
 
         
@@ -208,8 +208,7 @@ def main(args):
                 'best_acc': best_acc,
                 'optimizer' : optimizer.state_dict()
             }
-        if epoch % 10 == 9:
-            test(test_dataloader, net, device, epoch, args)
+        test(test_dataloader, net, device, epoch, args)
         if is_best:
             # torch.save(state_dict, filename)
             save_file = os.path.join(args.time_path, args.model_file.split("/")[-1])

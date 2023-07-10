@@ -14,7 +14,7 @@ class LADMM(torch.nn.Module):
         super(LADMM, self).__init__()
         self.layer_num = iter
         # 步长(二次惩罚项惩罚因子)
-        val_init = 5.0
+        val_init = 1.0e-2
         self.alpha = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))                  # w 
         self.beta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))                  # g(z)        
         self.gamma_l1 = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))               # u_l1
@@ -23,7 +23,7 @@ class LADMM(torch.nn.Module):
         self.s = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init))                       # for g(z)
 
         ## 拉格朗日乘子
-        val_init = 1.0e-3
+        val_init = 1.0e-4
         self.lambda_l1 = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init )) 
         self.lambda_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init )) 
         self.sigma = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))              # for g(z)
@@ -191,19 +191,21 @@ class LADMM(torch.nn.Module):
     def update_x(self, i, b, u_l1, eta_l1, u_tv, eta_tv, z, rho, w, tau, v, theta):
         resiual = self.conjPSF(self.delta[i] * v - theta)
         resiual +=  self.alpha[i] * w - tau
-        add_item = self.delta[i] * self.MTM + self.alpha[i]
+        
+        batch = b.size()[0]
+        MTM = self.MTM.repeat(batch,1,1,1)
+        DTD = self.DeltaTDelta.repeat(batch,1,1,1)
+        add_item = self.delta[i] * MTM + self.alpha[i]
         if self.enble_l1 == 1:
             resiual +=  self.gamma_l1[i] * u_l1 - eta_l1
             add_item += self.gamma_l1[i]
         if self.enble_tv == 1:
             resiual += self.DeltaT(self.gamma_tv[i] * u_tv - eta_tv)
-            add_item +=  self.gamma_tv[i] * self.DeltaTDelta
+            add_item +=  self.gamma_tv[i] * DTD
         if self.enble_cnn == 1:
             resiual +=  self.beta[i] * z - rho
             add_item += self.beta[i]
         freq_space_result = torch.fft.fft2(torch.fft.ifftshift(resiual))
-        batch = b.size()[0]
-        add_item = add_item.repeat(batch, 1,1,1)
         x =  torch.real(torch.fft.fftshift(torch.fft.ifft2( 1.0/add_item *freq_space_result)))
         return x
     
