@@ -17,11 +17,8 @@ import numpy as np
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from torch.utils.tensorboard import SummaryWriter
-writer = SummaryWriter('save') #建立一个保存数据用的东西，save是输出的文件名
-
-
  
-def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
+def train(dataloader, model, loss_fn, optimizer, epoch, device, args, writer:SummaryWriter):
 
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
@@ -36,22 +33,10 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
 
         # Compute prediction error
         pred = model(X)
-
-        # logging.debug("pred per batch:{}\n".format(pred)) 
-        # gamma = torch.Tensor([0.1]).to(device)
-        # pred_roll = torch.roll(pred, 1 , 1)
-        # loss_tv = loss_fn(pred, pred_roll)
-        # loss = loss_fn(pred, y) + torch.mul(gamma, sysloss) #+ loss_tv
-        # loss = torch.minimum(loss, torch.tensor(20))
-        # for model_fc
-        #red_roll = torch.roll(pred, 1 , 1)
-        #loss_tv = loss_fn(pred, pred_roll)
-        #gamma = torch.Tensor([0.5]).to(device)
         loss = loss_fn(pred, y) #+ torch.mul(gamma, loss_tv)
 
         logging.debug("loss per batch:{}\n".format(loss))
         losses.update(loss.item(), X.size(0))
-
         
         # Backpropagation
         optimizer.zero_grad()
@@ -63,15 +48,13 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args):
 
         if batch % 100 == 0:
             progress.display(batch)
-        writer = SummaryWriter(args.tb_name)  # 存放log文件的目录
+        
         writer.add_scalar('train/loss', loss, epoch)  # 画loss，横坐标为epoch
         writer.add_scalar('train/lr', optimizer.param_groups[0]["lr"], epoch)
-        writer.close()
-
 
     return losses.avg
     
-def val(dataloader, model, loss_fn, epoch, device):
+def val(dataloader, model, loss_fn, epoch, device, writer):
 
     losses = AverageMeter('Loss', ':.6f', Summary.NONE)
     progress = ProgressMeter( len(dataloader), [losses],prefix='Val: ')
@@ -98,9 +81,7 @@ def val(dataloader, model, loss_fn, epoch, device):
     losses.update(test_loss, 1)
     # progress.display_summary()
     logging.info(f"Val: Avg loss: {test_loss:>8f}")
-    writer = SummaryWriter(args.tb_name)  # 存放log文件的目录
     writer.add_scalar('val/loss', test_loss, epoch)  # 画loss，横坐标为epoch
-    writer.close()
     return test_loss
 
 
@@ -112,7 +93,7 @@ def test(dataloader, model, device, epoch, args):
             num = num + 1
             X, y = X.to(device), y.to(device)
             pred = model(X)
-            if num > 1:
+            if num > 3:
                 break      
             img = X.detach().squeeze(0).permute(1,2,0).cpu().numpy()
             rec = pred.detach().squeeze(0).permute(1,2,0).cpu().numpy()
@@ -123,6 +104,9 @@ def test(dataloader, model, device, epoch, args):
                 target[:,:,i] = target[:,:,i]/np.max(target[:,:,i])
             plt.rcParams['figure.figsize'] = (20, 4.0)
             fig, ax = plt.subplots(1,3)
+            img[img<0] = 0
+            rec[rec<0] = 0
+            target[target<0] = 0
             ax[0].imshow(img)
             ax[1].imshow(rec)
             ax[2].imshow(target)
@@ -192,12 +176,13 @@ def main(args):
     logging.info("Epoches:  {}".format(Epoches))
     scheduler = MultiStepLR(optimizer, milestones=args.steps, gamma=args.gamma)
     torch.autograd.set_detect_anomaly(True)
+    writer = SummaryWriter(args.tb_name)  # 存放log文件的目录
     for epoch in range(Epoches):
         # setup_seed(20)
         logging.info("learning ratio: {}".format(scheduler.get_last_lr()))
         # print(optimizer.param_groups)
-        train(train_dataloader, net, criterion, optimizer, epoch, device, args)
-        loss = val(val_dataloader, net, criterion, epoch, device)
+        train(train_dataloader, net, criterion, optimizer, epoch, device, args, writer)
+        loss = val(val_dataloader, net, criterion, epoch, device, writer)
         scheduler.step()    
         # remember best acc@1 and save checkpoint
         is_best = loss < best_acc
@@ -213,7 +198,7 @@ def main(args):
             # torch.save(state_dict, filename)
             save_file = os.path.join(args.time_path, args.model_file.split("/")[-1])
             torch.save(state_dict, save_file)
-            
+    writer.close()   
         
 
 if __name__ == '__main__':
@@ -267,7 +252,7 @@ if __name__ == '__main__':
     now = datetime.datetime.now()
     time_name = now.strftime("%Y%m%d%H%M%S")
     args.time_name = time_name
-    args.tb_name = "runs/logs_{}".format(time_name)
+
 
     time_path = os.path.join("debug", time_name)
     if not os.path.exists(time_path):
@@ -277,7 +262,7 @@ if __name__ == '__main__':
                         handlers=[logging.FileHandler(args.log_file,mode="w"), logging.StreamHandler(),
                                   logging.FileHandler("{}/{}".format(time_path, args.log_file.split("/")[-1]),mode="w")])
     logging.info("{}".format(vars(args)))
-
+    args.tb_name = os.path.join(args.time_path) #"runs/logs_{}".format(time_name)
     main(args)
 
 

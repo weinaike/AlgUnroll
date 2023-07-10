@@ -14,20 +14,21 @@ class LADMM(torch.nn.Module):
         super(LADMM, self).__init__()
         self.layer_num = iter
         # 步长(二次惩罚项惩罚因子)
-        val_init = 1.0e-2
-        self.alpha = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))                  # w 
-        self.beta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))                  # g(z)        
-        self.gamma_l1 = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))               # u_l1
-        self.gamma_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))               # u_tv
-        self.delta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))                 # Mx
-        self.s = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init))                       # for g(z)
+        val_init = 5.0e-5
+        grad = True
+        self.alpha = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                  # w 
+        self.beta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                  # g(z)        
+        self.gamma_l1 = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)               # u_l1
+        self.gamma_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)               # u_tv
+        self.delta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                 # Mx
+        self.s = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init), requires_grad=grad)                       # for g(z)
 
         ## 拉格朗日乘子
-        val_init = 1.0e-4
-        self.lambda_l1 = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init )) 
-        self.lambda_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init )) 
-        self.sigma = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))              # for g(z)
-        self.xi = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ))                 # I+(w)
+        val_init = 5.0e-5
+        self.lambda_l1 = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad) 
+        self.lambda_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad) 
+        self.sigma = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)              # for g(z)
+        self.xi = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                 # I+(w)
         
         
         im = Image.open(psf_file)
@@ -53,11 +54,13 @@ class LADMM(torch.nn.Module):
         self.enble_cnn = 1
         self.set_enble(mode)
 
-        self.k_iter = 3
-        self.blocks = torch.nn.ModuleList()
-        for i in range(iter * self.k_iter):
-            self.blocks.append(RegularBlock(filter, ks))
         self.param = self.set_param_list()
+        self.k_iter = 3
+        if self.enble_cnn == 1:            
+            self.blocks = torch.nn.ModuleList()
+            for i in range(iter * self.k_iter):
+                self.blocks.append(RegularBlock(filter, ks))
+        
 
         #self.has_res = has_res
         #if has_res:
@@ -141,12 +144,12 @@ class LADMM(torch.nn.Module):
     
     def PSF(self, x):
         H_fft = self.H_fft.repeat(x.size()[0],1,1,1)
-        Mx = torch.real(torch.fft.fftshift(torch.fft.ifft2((torch.fft.fft2(torch.fft.ifftshift(x,dim=(-2,-1))) * H_fft), dim=(-2,-1))))
+        Mx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x,dim=(-2,-1))) * H_fft), dim=(-2,-1)))
         return Mx
     
     def conjPSF(self,x):        
         H_fft = self.H_fft.repeat(x.size()[0],1,1,1)
-        MTx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x, dim=(-2,-1))) * torch.conj(H_fft),dim=(-2,-1))))
+        MTx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x, dim=(-2,-1))) * torch.conj(H_fft)),dim=(-2,-1)))
         return MTx
 
     # mode in ["l1", "tv", "dwt"]
@@ -205,8 +208,8 @@ class LADMM(torch.nn.Module):
         if self.enble_cnn == 1:
             resiual +=  self.beta[i] * z - rho
             add_item += self.beta[i]
-        freq_space_result = torch.fft.fft2(torch.fft.ifftshift(resiual))
-        x =  torch.real(torch.fft.fftshift(torch.fft.ifft2( 1.0/add_item *freq_space_result)))
+        freq_space_result = torch.fft.fft2(torch.fft.ifftshift(resiual,  dim=(-2,-1)))
+        x =  torch.real(torch.fft.fftshift(torch.fft.ifft2( 1.0/add_item *freq_space_result), dim=(-2,-1)))
         return x
     
 
@@ -254,6 +257,14 @@ class LADMM(torch.nn.Module):
         tau = torch.zeros_like(x)
         theta = torch.zeros_like(x)
 
+
+        u_l1 = torch.zeros_like(x)
+        u_tv = torch.zeros_like(self.Delta(x))
+        v = torch.zeros_like(x)
+        w = torch.zeros_like(x)
+        z = torch.zeros_like(x)
+
+
         for i in range(self.layer_num):
             u_l1 = self.update_ui(i, x, eta_l1, mode = "l1")
             u_tv = self.update_ui(i, x, eta_tv, mode = "tv")
@@ -271,6 +282,9 @@ class LADMM(torch.nn.Module):
             tau = self.update_tau(i, x, w, tau)
         
         return  self.Crop(x)
+    
+
+    
     def to(self,device):
         super(LADMM, self).to(device)
         self.H_fft = self.H_fft.to(device)

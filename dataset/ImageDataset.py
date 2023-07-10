@@ -38,11 +38,11 @@ class ImageFileDataset(Dataset):
         self.csv_data = np.loadtxt(open(csv_file,"rb"),dtype=str,usecols=[0])             
 
         for item in self.csv_data:
-            if "tiff" not in item:
-                print(item, "is not exist")
-                continue
-
-            item = item[:-9]+".npy"
+            if "npy" not  in item:
+                if "tiff" not in item:
+                    print(item, "is not exist")
+                    continue
+                item = item[:-9]+".npy"
             img_file = os.path.join(path,"diffuser_images",item)
             gt_file = os.path.join(path,"ground_truth_lensed", item)
             if os.path.exists(img_file) and os.path.exists(gt_file):
@@ -59,14 +59,11 @@ class ImageFileDataset(Dataset):
 
         img = np.load(self.images[idx])
         target = np.load(self.targets[idx])
-
-
         h, w, c = img.shape
         for i in range(c):
             img[:,:,i] /= np.linalg.norm(img[:,:,i].ravel())
             target[:,:,i] /= np.linalg.norm(target[:,:,i].ravel())
-
-
+            # np.save("ldata_{}.npy".format(i), img[:,:,i])
 
         return torch.tensor(img).float().permute(2,0,1),  torch.tensor(target).float().permute(2,0,1)
 

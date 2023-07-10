@@ -3,13 +3,14 @@ import numpy as np
 from model_block import SoftThresh
 import PIL.Image as Image
 import matplotlib.pyplot as plt
+
 class ADMM(torch.nn.Module):
     def __init__(self, psf_file, mode = "tv", iters = 100, senor_size =[480,270], rgb_idx = 0, disp = 20, autotune = False ):
         # 步长
         self.iter = iters
         self.disp = disp
         self.gamma_l1 = 1e-4                # u_l1
-        self.gamma_tv = 1e-4               # u_tv
+        self.gamma_tv = 5e-4               # u_tv
         self.alpha = 5e-4                 # w 
         self.delta = 5e-5                  # M
   
@@ -232,8 +233,8 @@ class ADMM(torch.nn.Module):
 
 if __name__ == '__main__':
     
-    diffuser = "data/diffuser/im326.npy"
-    lensed = "data/lensed/im326.npy"
+    diffuser = "data/diffuser_images/im326.npy"
+    lensed = "data/ground_truth_lensed/im326.npy"
     psf_file = "data/psf.tiff"
     compress_img = np.load(diffuser)
     h,w,ch = compress_img.shape
@@ -241,7 +242,7 @@ if __name__ == '__main__':
 
     iter = 100
     for i in range(ch):
-        admm = ADMM(psf_file, mode="tv", iters = iter, senor_size =[w,h], rgb_idx = i, disp = iter, autotune=True)
+        admm = ADMM(psf_file, mode="tv", iters = iter, senor_size =[w,h], rgb_idx = i, disp = iter, autotune=False)
         data = compress_img[:,:,i]
         data /= np.linalg.norm(data.ravel(),ord=2) #这种方式归一化后，均值在0.002左右
         recon = np.array(admm.forward(torch.tensor(data,dtype=torch.float)))
