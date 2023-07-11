@@ -279,15 +279,20 @@ class LADMM(torch.nn.Module):
             theta  = self.update_theta(i, x, v, theta)
             rho = self.update_rho(i, x, z, rho)
             tau = self.update_tau(i, x, w, tau)
+        
         xout = self.Crop(x)
-        xout = self.image_normlize(xout)
+        xout = self.normalize_image(xout)
 
         return xout
     
-    def image_normlize(self, x):
-        for i in range(x.size()[0]):
-            x[i,:,:,:] /= torch.max(x[i,:,:,:])
-        return x
+    def normalize_image(self, image):
+        out_shape = image.shape
+        image_flat = image.reshape((out_shape[0],out_shape[1]*out_shape[2]*out_shape[3]))
+        image_max,_ = torch.max(image_flat,1)
+        image_max_eye = torch.eye(out_shape[0], dtype = torch.float32, device=image.device)*1/image_max
+        image_normalized = torch.reshape(torch.matmul(image_max_eye, image_flat), (out_shape[0],out_shape[1],out_shape[2],out_shape[3]))   
+        return image_normalized
+    
 
     def to(self,device):
         super(LADMM, self).to(device)

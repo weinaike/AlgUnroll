@@ -1,7 +1,7 @@
 python main_image.py \
 -b 16 \
 -j 20 \
--lr 1e-6 \
+-lr 1e-3 \
 --steps 20 \
 --epochs 30 \
 --mode only_tv \
