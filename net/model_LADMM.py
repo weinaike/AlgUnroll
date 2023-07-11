@@ -14,30 +14,29 @@ class LADMM(torch.nn.Module):
         super(LADMM, self).__init__()
         self.layer_num = iter
         # 步长(二次惩罚项惩罚因子)
-        val_init = 5.0e-5
+        val_init = 1.0e-4
         grad = True
         self.alpha = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                  # w 
         self.beta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                  # g(z)        
         self.gamma_l1 = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)               # u_l1
         self.gamma_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)               # u_tv
-        self.delta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                 # Mx
+        self.delta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init), requires_grad=grad)                 # Mx
         self.s = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init), requires_grad=grad)                       # for g(z)
 
         ## 拉格朗日乘子
-        val_init = 5.0e-5
+        val_init = 1.0e-4
         self.lambda_l1 = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad) 
-        self.lambda_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad) 
+        self.lambda_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init *2 ), requires_grad=grad) 
         self.sigma = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)              # for g(z)
         self.xi = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                 # I+(w)
         
         
         im = Image.open(psf_file)
-        im = im.resize(senor_size)
+        im = im.resize(senor_size) 
         psf = np.array(im,dtype='float32')
         h, w, c = psf.shape
-        for i in range(c):        
-            psf[:,:,i] /= np.linalg.norm(psf[:,:,i].ravel())
-        psf = torch.tensor(psf).permute(2,0,1)  
+        psf /= np.linalg.norm(psf.ravel())
+        psf = torch.tensor(psf).permute(2,0,1)
         
 
         self.c = c
@@ -185,7 +184,7 @@ class LADMM(torch.nn.Module):
             mu_3 =  (self.sigma[i])
             z = x + rho /  (self.beta[i])
             for j in range(k_iter):
-                z = (1 - mu_2) * z  + mu_2 * (x + rho / self.beta[i])# - mu_3 * self.blocks[i * k_iter + j](z)
+                z = (1 - mu_2) * z  + mu_2 * (x + rho / self.beta[i]) - mu_3 * self.blocks[i * k_iter + j](z)
                 # print(z)
             return z
         else:
@@ -247,7 +246,7 @@ class LADMM(torch.nn.Module):
     def update_theta(self, i, x, v, theta):
         theta += self.delta[i] * (self.PSF(x) - v)
         return theta
-
+    
     def forward(self, b):
         b = self.Pad(b)
         x = torch.zeros_like(b)
@@ -280,11 +279,16 @@ class LADMM(torch.nn.Module):
             theta  = self.update_theta(i, x, v, theta)
             rho = self.update_rho(i, x, z, rho)
             tau = self.update_tau(i, x, w, tau)
-        
-        return  self.Crop(x)
-    
+        xout = self.Crop(x)
+        xout = self.image_normlize(xout)
 
+        return xout
     
+    def image_normlize(self, x):
+        for i in range(x.size()[0]):
+            x[i,:,:,:] /= torch.max(x[i,:,:,:])
+        return x
+
     def to(self,device):
         super(LADMM, self).to(device)
         self.H_fft = self.H_fft.to(device)

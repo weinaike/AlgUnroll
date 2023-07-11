@@ -50,20 +50,21 @@ class ImageFileDataset(Dataset):
                 self.targets.append(gt_file)
             else:
                 print(item, "is not exists")
-
+        img = np.load(self.images[0])
+        h, w, c = img.shape
+        self.sz = [h, w]
         self.sample_count = len(self.images)
+
     def __len__(self):
         return self.sample_count
-
+    
+    def get_size(self):
+        return self.sz
     def __getitem__(self, idx):
-
         img = np.load(self.images[idx])
         target = np.load(self.targets[idx])
-        h, w, c = img.shape
-        for i in range(c):
-            img[:,:,i] /= np.linalg.norm(img[:,:,i].ravel())
-            target[:,:,i] /= np.linalg.norm(target[:,:,i].ravel())
-            # np.save("ldata_{}.npy".format(i), img[:,:,i])
+        img /= np.linalg.norm(img.ravel())
+        target /= np.max(target)
 
         return torch.tensor(img).float().permute(2,0,1),  torch.tensor(target).float().permute(2,0,1)
 

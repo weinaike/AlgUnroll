@@ -9,12 +9,15 @@ from torch.utils.data import DataLoader
 from dataset.ImageDataset import ImageFileDataset
 import argparse
 import logging
-from torch.optim.lr_scheduler import StepLR, MultiStepLR
+from torch.optim.lr_scheduler import MultiStepLR
 import datetime
 from meter import AverageMeter, Summary, ProgressMeter
-import random
 import numpy as np
+import lpips
+
+
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+plt.switch_backend('agg')
 
 from torch.utils.tensorboard import SummaryWriter
  
@@ -27,16 +30,18 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args, writer:Sum
     model.train()
 
     end = time.time()
-    for batch, (X, y) in enumerate(dataloader):
+    for batch, (x, y) in enumerate(dataloader):
         data_time.update(time.time() - end)
-        X, y = X.to(device), y.to(device)
+        x, y = x.to(device), y.to(device)
 
         # Compute prediction error
-        pred = model(X)
-        loss = loss_fn(pred, y) #+ torch.mul(gamma, loss_tv)
+        pred = model(x)
+        loss1 = loss_fn[0](pred, y) 
+        loss2 = loss_fn[1](pred, y) 
+        loss = loss1 + loss2
 
-        logging.debug("loss per batch:{}\n".format(loss))
-        losses.update(loss.item(), X.size(0))
+        logging.debug("loss per batch:{} = {} + {}\n".format(loss, loss1, loss2))
+        losses.update(loss.item(), x.size(0))
         
         # Backpropagation
         optimizer.zero_grad()
@@ -55,31 +60,18 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args, writer:Sum
     return losses.avg
     
 def val(dataloader, model, loss_fn, epoch, device, writer):
-
     losses = AverageMeter('Loss', ':.6f', Summary.NONE)
-    progress = ProgressMeter( len(dataloader), [losses],prefix='Val: ')
-
-    size = len(dataloader.dataset)
     num_batches = len(dataloader)
     model.eval()
     test_loss = 0
     with torch.no_grad():
-        for X, y in dataloader:
-            X, y = X.to(device), y.to(device)
-            pred = model(X)
-            # pred_max, pred_max_ind = torch.max(pred,dim=1)
-            # y_max, y_max_ind = torch.max(pred, dim=1)
-            # print(pred_max_ind, y_max_ind)
-            test_loss += (loss_fn(pred, y)).item() 
-            # for model_fc
-            # count = torch.sum(pred.gt(0.01) ) 
-            # pred_roll = torch.roll(pred, 1 , 1)
-            # y_roll = torch.roll(y, 1 , 1)
-            # test_loss += (loss_fn(pred, y)).item() + loss_fn(pred - pred_roll, y - y_roll).item()
-    test_loss /= num_batches
+        for x, y in dataloader:
+            x, y = x.to(device), y.to(device)
+            pred = model(x)
+            test_loss += (loss_fn[1](pred, y)).item() 
 
+    test_loss /= num_batches
     losses.update(test_loss, 1)
-    # progress.display_summary()
     logging.info(f"Val: Avg loss: {test_loss:>8f}")
     writer.add_scalar('val/loss', test_loss, epoch)  # 画loss，横坐标为epoch
     return test_loss
@@ -89,19 +81,20 @@ def test(dataloader, model, device, epoch, args):
     model.eval()
     num = 0  
     with torch.no_grad():
-        for X, y in dataloader:
+        for x, y in dataloader:
             num = num + 1
-            X, y = X.to(device), y.to(device)
-            pred = model(X)
+            x, y = x.to(device), y.to(device)
+            pred = model(x)
             if num > 3:
                 break      
-            img = X.detach().squeeze(0).permute(1,2,0).cpu().numpy()
+            img = x.detach().squeeze(0).permute(1,2,0).cpu().numpy()
             rec = pred.detach().squeeze(0).permute(1,2,0).cpu().numpy()
             target = y.detach().squeeze(0).permute(1,2,0).cpu().numpy()
-            for i in range(3):
-                img[:,:,i] = img[:,:,i]/np.max(img[:,:,i])
-                rec[:,:,i] = rec[:,:,i]/np.max(rec[:,:,i])
-                target[:,:,i] = target[:,:,i]/np.max(target[:,:,i])
+
+            img /= np.max(img)
+            rec /= np.max(rec)
+            target /= np.max(target)
+            
             plt.rcParams['figure.figsize'] = (20, 4.0)
             fig, ax = plt.subplots(1,3)
             img[img<0] = 0
@@ -137,7 +130,7 @@ def main(args):
     
     training_data = ImageFileDataset(args.data_path, train=True)
     val_data = ImageFileDataset(args.data_path, train=False)
-
+    sz = training_data.get_size()
 
     train_dataloader = DataLoader(training_data, batch_size=Batch_Size, shuffle=False, persistent_workers = True, prefetch_factor = 4, 
                                   drop_last=True,num_workers=workers, pin_memory=True)
@@ -147,7 +140,7 @@ def main(args):
                                  drop_last=False)
  
     # 3.模型加载, 并对模型进行微调
-    net = LADMM(mode=args.mode,psf_file=args.psf_file, iter= args.layer_num,senor_size =[480,270], filter= args.filter_num, ks=args.kernel_size)
+    net = LADMM(mode=args.mode,psf_file=args.psf_file, iter= args.layer_num,senor_size =[sz[1],sz[0]], filter= args.filter_num, ks=args.kernel_size)
     logging.info(net)
 
     if pretrained is not None:
@@ -168,7 +161,7 @@ def main(args):
     # 5.定义损失函数，以及优化器
     # criterion = torch.nn.CrossEntropyLoss()
     # criterion = torch.nn.L1Loss(reduction='sum')
-    criterion = torch.nn.MSELoss(reduction='sum')
+    criterions = [torch.nn.MSELoss(reduction='mean'), lpips.LPIPS(net='alex')]
 
     optimizer = optim.Adam(net.parameters(), lr=LR)    
     # optimizer = torch.optim.SGD(net.parameters(), lr=LR, momentum=0.9)
@@ -181,8 +174,8 @@ def main(args):
         # setup_seed(20)
         logging.info("learning ratio: {}".format(scheduler.get_last_lr()))
         # print(optimizer.param_groups)
-        train(train_dataloader, net, criterion, optimizer, epoch, device, args, writer)
-        loss = val(val_dataloader, net, criterion, epoch, device, writer)
+        train(train_dataloader, net, criterions, optimizer, epoch, device, args, writer)
+        loss = val(val_dataloader, net, criterions, epoch, device, writer)
         scheduler.step()    
         # remember best acc@1 and save checkpoint
         is_best = loss < best_acc
