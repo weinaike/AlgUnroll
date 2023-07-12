@@ -36,13 +36,13 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args, writer:Sum
 
         # Compute prediction error
         pred = model(x)
-        loss1 = loss_fn[0](pred, y) 
-        with torch.no_grad():
-            loss2 = torch.mean(loss_fn[1](pred, y))
+        loss1 = loss_fn[0](pred, y) + + 1e-6
+        # with torch.no_grad():
+        loss2 = torch.mean(loss_fn[1](pred, y) + 1e-6)
         gamma = 10
         if epoch > 20:
             gamma = 1
-        loss = loss1 * gamma + loss2
+        loss = loss1 * gamma + loss2 
 
         logging.debug("loss per batch:{} = {} * {} + {}\n".format(loss, loss1, gamma, loss2))
         losses.update(loss.item(), x.size(0))
@@ -165,7 +165,7 @@ def main(args):
     # 5.定义损失函数，以及优化器
     # criterion = torch.nn.CrossEntropyLoss()
     # criterion = torch.nn.L1Loss(reduction='sum')
-    criterions = [torch.nn.MSELoss(reduction='mean'), lpips.LPIPS(net='alex',).to(device)]
+    criterions = [torch.nn.MSELoss(reduction='mean'), lpips.LPIPS(net='alex',lpips=False).to(device)]
 
     optimizer = optim.Adam(net.parameters(), lr=LR)    
     # optimizer = torch.optim.SGD(net.parameters(), lr=LR, momentum=0.9)

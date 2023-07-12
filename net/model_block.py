@@ -13,7 +13,8 @@ class RegularBlock(torch.nn.Module):
         super(RegularBlock, self).__init__()
         self.block = torch.nn.Sequential(torch.nn.Conv2d(3, filter, kernel_size=kernel_size, padding = kernel_size//2, groups=3), 
                                         torch.nn.ReLU(), 
-                                        torch.nn.Conv2d(filter, 3, kernel_size=kernel_size, padding = kernel_size//2), groups=3)
+                                        torch.nn.Conv2d(filter, 3, kernel_size=kernel_size, padding = kernel_size//2, groups=3)
+        )
     def forward(self,x):        
         x = self.block(x)
         return x
