@@ -36,9 +36,9 @@ def train(dataloader, model, loss_fn, optimizer, epoch, device, args, writer:Sum
 
         # Compute prediction error
         pred = model(x)
-        loss1 = loss_fn[0](pred, y) + + 1e-6
+        loss1 = loss_fn[0](pred, y) 
         # with torch.no_grad():
-        loss2 = torch.mean(loss_fn[1](pred, y) + 1e-6)
+        loss2 = torch.mean(loss_fn[1](pred, y, retPerLayer=False, normalize=True))
         gamma = 10
         if epoch > 20:
             gamma = 1

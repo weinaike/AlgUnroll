@@ -14,7 +14,7 @@ class LADMM(torch.nn.Module):
         super(LADMM, self).__init__()
         self.layer_num = iter
         # 步长(二次惩罚项惩罚因子)
-        val_init = 1.0e-4
+        val_init = 1.0e-3
         grad = True
         self.alpha = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                  # w 
         self.beta =  torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)                  # g(z)        
@@ -23,7 +23,7 @@ class LADMM(torch.nn.Module):
         self.s = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init), requires_grad=grad)                       # for g(z)
 
         ## 拉格朗日乘子
-        val_init = 1.0e-4
+        val_init = 1.0e-3
         self.lambda_tv = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init *2 ), requires_grad=grad) 
         self.sigma = torch.nn.Parameter(torch.Tensor(torch.ones(self.layer_num)*val_init ), requires_grad=grad)              # for g(z)        
         

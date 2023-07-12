@@ -3,51 +3,43 @@ import numpy as np
 from model_block import SoftThresh
 import PIL.Image as Image
 import matplotlib.pyplot as plt
+import math
+
+def closest_power_of_two(n):
+    power = math.floor(math.log2(n)) + 1
+    result = 2 ** power
+    return result
 
 class ADMM(torch.nn.Module):
     def __init__(self, psf_file, mode = "tv", iters = 100, senor_size =[480,270], rgb_idx = 0, disp = 20, autotune = False ):
         # 步长
         self.iter = iters
         self.disp = disp
-        self.gamma_l1 = 1e-4                # u_l1
         self.gamma_tv = 5e-4               # u_tv
         self.alpha = 5e-4                 # w 
         self.delta = 5e-5                  # M
   
         ## 拉格朗日乘子
-        self.lambda_l1 = 1.0e-4             # u_l1
-        self.lambda_tv = 5.0e-5             # u_tv
+        self.lambda_tv = 1.0e-4            # u_tv
 
-        if mode == "tv":          
-            self.gamma_l1 = 0
-            self.lambda_l1 = 0
-
-        elif mode == "l1":
-            self.gamma_tv = 0
-            self.lambda_tv = 0
-
-        elif mode == "l1_tv":
-            pass
-        else:
-            print("mode [{}] is not support ".format(mode))
-            assert(0)
         im = Image.open(psf_file)
-        im = im.resize(senor_size)
+        im = im.resize(senor_size) 
         psf = np.array(im,dtype='float32')
-        psf = psf[:,:,rgb_idx]
-        psf /= np.linalg.norm(psf.ravel(),ord=2) # 二范数归一化，均值在0.001左右        
-        psf = torch.tensor(psf)        
-        self.sz = psf.size()
-        self.full_sz = torch.Size([self.sz[0]*2, self.sz[1]*2])
+        h, w, c = psf.shape
+        psf /= np.linalg.norm(psf.ravel())
+        psf = torch.tensor(psf).permute(2,0,1)
+        
 
-        self.H_fft = torch.fft.fft2(torch.fft.ifftshift(self.Pad(psf)))
+        self.c = c
+        self.sz = torch.Size([h, w])
+        self.full_sz = torch.Size([closest_power_of_two(self.sz[0]*2), closest_power_of_two(self.sz[1]*2)])
+        # self.full_sz = torch.Size([self.sz[0]*2, self.sz[1]*2])
 
-        self.ATA = torch.abs(torch.conj(self.H_fft)*self.H_fft)
-
-
+        self.H_fft = torch.fft.fft2(torch.fft.ifftshift(self.Pad(psf), dim=(-2, -1)))
+        self.MTM = (torch.abs(torch.conj(self.H_fft)*self.H_fft)) #这个需要再探讨
         self.DeltaTDelta = self.precompute_DeltaTDelta()
 
-        self.inv_item = 1.0/(self.delta * self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
+        self.inv_item = 1.0/(self.delta * self.MTM + self.gamma_tv * self.DeltaTDelta + self.alpha)
 
         self.autotune = autotune
 
@@ -57,7 +49,7 @@ class ADMM(torch.nn.Module):
 
 
     def update_inv(self):
-        self.inv_item = 1.0/(self.delta * self.ATA + self.gamma_tv * self.DeltaTDelta + (self.alpha + self.gamma_l1))
+        self.inv_item = 1.0/(self.delta * self.MTM + self.gamma_tv * self.DeltaTDelta + self.alpha )
 
     def update_param(self, mu, primal_res, dual_res):
         if primal_res > self.res_tol * dual_res:
@@ -77,16 +69,16 @@ class ADMM(torch.nn.Module):
         PsiTPsi[0,0] = 4
         PsiTPsi[0,1] = PsiTPsi[1,0] = PsiTPsi[0,-1] = PsiTPsi[-1,0] = -1
         PsiTPsi = np.abs(torch.fft.fft2(PsiTPsi))
-        return PsiTPsi
+        return PsiTPsi.repeat(self.c,1,1)
     
     def Delta(self, img):
-        return torch.stack((torch.roll(img,1,dims=0) - img, torch.roll(img,1,dims=1) - img), dim=2)              
+        return torch.stack((torch.roll(img,1,dims=1) - img, torch.roll(img,1,dims=2) - img), dim=3)
 
     def DeltaT(self, x_diff):
-        vec1 = x_diff[:,:,0]
-        vec2 = x_diff[:,:,1]
-        diff1 = torch.roll(vec1, -1, dims=0) - vec1
-        diff2 = torch.roll(vec2, -1, dims=1) - vec2
+        vec1 = x_diff[:,:,:,0]
+        vec2 = x_diff[:,:,:,1]
+        diff1 = torch.roll(vec1, -1, dims=1) - vec1
+        diff2 = torch.roll(vec2, -1, dims=2) - vec2
         return diff1 + diff2    
     
     def Crop(self,M):
@@ -95,7 +87,10 @@ class ADMM(torch.nn.Module):
         bottom = (self.full_sz[0] + self.sz[0])//2
         left = (self.full_sz[1] - self.sz[1])//2
         right = (self.full_sz[1] + self.sz[1])//2
-        return M[top:bottom,left:right]
+        return M[:,top:bottom,left:right]
+
+    def CTC(self,x):
+        return self.Pad(self.Crop(x))
 
     def Pad(self,b):
         v_pad = (self.full_sz[0] -  self.sz[0])//2
@@ -103,49 +98,30 @@ class ADMM(torch.nn.Module):
         return torch.nn.functional.pad(b,(h_pad,h_pad,v_pad,v_pad),"constant",0)
     
     def PSF(self, x):
-        Ax = torch.real(torch.fft.fftshift(torch.fft.ifft2((torch.fft.fft2(torch.fft.ifftshift(x)) * self.H_fft))))
-        return Ax
+        Mx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x,dim=(-2,-1))) * self.H_fft), dim=(-2,-1)))
+        return Mx
+    
+    def conjPSF(self,x):        
+        MTx = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(x, dim=(-2,-1))) * torch.conj(self.H_fft)),dim=(-2,-1)))
+        return MTx
 
-
-    # mode in ["l1", "tv", "dwt"]
     def update_ui(self, x, eta, mode = "tv"):   
-        if mode == "l1":
-            if self.lambda_l1 != 0:
-                val = x + eta / self.gamma_l1
-                thresh = self.lambda_l1 / self.gamma_l1
-                return SoftThresh(val, thresh)
-            else:
-                return torch.zeros_like(x)
-        elif mode == "tv":
-            if self.lambda_tv != 0:
-                val = self.Delta(x) + eta / self.gamma_tv
-                thresh = self.lambda_tv / self.gamma_tv
-                return SoftThresh(val, thresh)
-            else:
-                return torch.zeros_like(self.Delta(x))
-        else:
-            print("mode [{}] is not support".format(mode))
-            assert(0)
+        val = self.Delta(x) + eta / self.gamma_tv
+        thresh =  self.lambda_tv / self.gamma_tv
+        return SoftThresh(val, thresh)
+
     
     def update_w(self, x, tau):
-        val = x + tau/self.alpha
+        val = x + tau/ self.alpha
         return torch.maximum(val,torch.tensor(0))
     
 
-    def update_x(self, b, u_l1, eta_l1, u_tv, eta_tv, w, tau, v, theta):
-        diff = self.delta * v - theta
-        resiual = torch.real(torch.fft.fftshift(torch.fft.ifft2(torch.fft.fft2(torch.fft.ifftshift(diff)) * torch.conj(self.H_fft))))
-        if self.gamma_l1 !=0 :
-            resiual += (torch.mul(self.gamma_l1, u_l1) - eta_l1) 
-        if self.gamma_tv != 0:
-            z_tv = (torch.mul(self.gamma_tv, u_tv) - eta_tv)
-            resiual += self.DeltaT(z_tv)
-        if self.alpha != 0:
-            resiual += (torch.mul(self.alpha , w) - tau)
-
-        freq_space_result = self.inv_item * torch.fft.fft2(torch.fft.ifftshift(resiual))
-
-        x =  torch.real(torch.fft.fftshift(torch.fft.ifft2(freq_space_result)))
+    def update_x(self, b, u_tv, eta_tv, w, tau, v, theta):
+        resiual = self.conjPSF(self.delta * v - theta)
+        resiual +=  self.alpha * w - tau        
+        resiual += self.DeltaT(self.gamma_tv * u_tv - eta_tv)
+        freq_space_result = torch.fft.fft2(torch.fft.ifftshift(resiual,  dim=(-2,-1)))
+        x =  torch.real(torch.fft.fftshift(torch.fft.ifft2( self.inv_item *freq_space_result), dim=(-2,-1)))
         return x
         
 
@@ -157,14 +133,8 @@ class ADMM(torch.nn.Module):
 
 
     def update_eta(self, x, u, eta, mode = "tv"):
-        if mode == "l1":
-            eta += torch.mul(self.gamma_l1, (x - u))
-        elif mode == "tv":
-            eta += torch.mul(self.gamma_tv , self.Delta(x) - u)
-        else:
-            print("mode [{}] is not support".format(mode))
-            assert(0)
-        return eta
+        eta_n = eta + torch.mul(self.gamma_tv , self.Delta(x) - u)
+        return eta_n
 
 
     def update_tau(self, x, w, tau):
@@ -178,33 +148,28 @@ class ADMM(torch.nn.Module):
     def forward(self, b):
 
         b = self.Pad(b)
-        x = torch.zeros(self.full_sz)
-        eta_l1 = torch.zeros(self.full_sz)
+        x = torch.zeros_like(b)
         eta_tv = torch.zeros_like(self.Delta(x))
-        tau = torch.zeros(self.full_sz)
-        theta = torch.zeros(self.full_sz)
+        tau = torch.zeros_like(x)
+        theta = torch.zeros_like(x)
 
         for i in range(self.iter):
             x_pre = x
-            u_l1 = self.update_ui(x, eta_l1, mode = "l1")
+
             u_tv = self.update_ui(x, eta_tv, mode = "tv")
             v = self.update_v(x, b, theta)     
             w = self.update_w(x, tau) 
-            x = self.update_x(b, u_l1, eta_l1, u_tv, eta_tv, w, tau, v, theta)                      
 
-            eta_l1 = self.update_eta(x, u_l1, eta_l1, mode="l1")
+            x = self.update_x(b, u_tv, eta_tv, w, tau, v, theta)    
+
             eta_tv = self.update_eta(x, u_tv, eta_tv, mode="tv")
             theta  = self.update_theta(x, v, theta)
-            tau    = self.update_tau(x, w, tau)           
+            tau    = self.update_tau(x, w, tau)   
             
             if self.autotune:
                 primal_res_w = torch.norm(w-x)
                 dual_res_w = torch.norm((x - x_pre)) * self.alpha
                 self.alpha = self.update_param(self.alpha, primal_res_w, dual_res_w) 
-
-                primal_res_l1 = torch.norm(u_l1-x)
-                dual_res_l1 = torch.norm((x - x_pre))*self.gamma_l1
-                self.gamma_l1 = self.update_param(self.gamma_l1, primal_res_l1, dual_res_l1)
 
                 Dx = self.Delta(x)
                 Dx_pre = self.Delta(x_pre)
@@ -222,15 +187,16 @@ class ADMM(torch.nn.Module):
                 self.update_inv()
                 
             if i % self.disp == 0:
-                
-                plt.imshow(self.Crop(x), cmap="gray")
-                plt.colorbar()
+                x_out = self.Crop(x).permute(1,2,0)          
+                x_out = x_out / torch.max(x_out)
+                x_out[x_out<0]=0
+                plt.imshow(x_out, cmap="gray")
                 plt.show(block=False)
                 plt.pause(2) # 显示1s
                 plt.close()
-        print("alpha: {} gamma_l1: {} gamma_tv:{} delta:{}".format(self.alpha, self.gamma_l1, self.gamma_tv, self.delta))
+        print("alpha: {} gamma_tv:{} delta:{}".format(self.alpha, self.gamma_tv, self.delta))
         return self.Crop(x)
-
+    
 if __name__ == '__main__':
     
     diffuser = "data/diffuser_images/im326.npy"
@@ -238,20 +204,17 @@ if __name__ == '__main__':
     psf_file = "data/psf.tiff"
     compress_img = np.load(diffuser)
     h,w,ch = compress_img.shape
-    recons = list()
 
     iter = 100
-    for i in range(ch):
-        admm = ADMM(psf_file, mode="tv", iters = iter, senor_size =[w,h], rgb_idx = i, disp = iter, autotune=False)
-        data = compress_img[:,:,i]
-        data /= np.linalg.norm(data.ravel(),ord=2) #这种方式归一化后，均值在0.002左右
-        recon = np.array(admm.forward(torch.tensor(data,dtype=torch.float)))
-        recon /= np.max(recon)
-        recon[recon<0] = 0
-        recons.append(recon)
+    admm = ADMM(psf_file, mode="tv", iters = iter, senor_size =[w,h], disp = 10, autotune=True)
+
+    compress_img /= np.linalg.norm(compress_img.ravel(),ord=2) #这种方式归一化后，均值在0.002左右
+    recon = np.array(admm.forward(torch.tensor(compress_img,dtype=torch.float).permute(2,0,1)))
+    recon /= np.max(recon)
+    recon[recon<0] = 0
 
     fig, ax = plt.subplots(1,2)
-    ax[0].imshow(np.array(recons).transpose(1,2,0))
+    ax[0].imshow(np.array(recon).transpose(1,2,0))
     ax[0].set_title("Final reconstructed image")
     ax[1].imshow(np.load(lensed))
     ax[1].set_title("Lensed image")
